@@ -624,6 +624,11 @@ class TestDmsLocation:
             "N 52° 22.057'\r\nE 4° 54.246'",
             "52°\u202f22\u2032\u202fN 4°\u202f54\u2032\u202fE",
             "52°22'N\u20094°54'E",
+            "52°22'N\u30004°54'E",
+            "52°22'N\u20074°54'E",
+            "52°22'N\u20284°54'E",
+            "52°22'N\f4°54'E",
+            "52°22'N\v4°54'E",
             "52°22,5'N 4°54,2'O",
             "52º22'3''N 4º54'14''E",
         ],
@@ -632,6 +637,19 @@ class TestDmsLocation:
         result = scrub_text(f"at {value} today")
         assert result["text"] == "at [LOCATION] today"
         assert result["counts"]["location"] == 1
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("N 52°22' E 4°54'\n3''rd line", "[LOCATION]\n3''rd line"),
+            ("N 52°22' E 4°54' 12\"x", "[LOCATION] 12\"x"),
+        ],
+    )
+    def test_seconds_glued_to_a_word_fall_back_to_minutes(
+        self, text: str, expected: str
+    ) -> None:
+        # Python backtracks past the optional seconds; Rust must emulate it.
+        assert scrub_text(text)["text"] == expected
 
     @pytest.mark.parametrize(
         "text",

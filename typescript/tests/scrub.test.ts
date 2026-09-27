@@ -363,6 +363,9 @@ describe("scrubText", () => {
       "N 52° 22.057'\r\nE 4° 54.246'",
       "52°\u202f22\u2032\u202fN 4°\u202f54\u2032\u202fE",
       "52°22'N\u20094°54'E",
+      "52°22'N\u30004°54'E",
+      "52°22'N\u20284°54'E",
+      "52°22'N\f4°54'E",
       "52°22,5'N 4°54,2'O",
       "52º22'3''N 4º54'14''E",
     ]) {
@@ -381,6 +384,8 @@ describe("scrubText", () => {
     ]) {
       expect(scrubText(text).text).toBe(text);
     }
+    expect(scrubText("N 52°22' E 4°54'\n3''rd line").text).toBe("[LOCATION]\n3''rd line");
+    expect(scrubText(`N 52°22' E 4°54' 12"x`).text).toBe(`[LOCATION] 12"x`);
   });
 
   it("masks internationalized email addresses", () => {

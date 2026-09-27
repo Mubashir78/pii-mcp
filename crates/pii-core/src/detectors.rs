@@ -352,11 +352,15 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
     }
 }
 
+/// Unicode Zs separators commonly used in OCR / rich text (thin / figure /
+/// nbsp …), shared by the IBAN, card, and DMS patterns.
+const SEP_SPACE: &str = r"[ \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}]";
+
 fn iban_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
     RES.get_or_init(|| {
         // Unicode Zs separators commonly used in OCR / rich text.
-        let sep = r"[ \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}]";
+        let sep = SEP_SPACE;
         vec![
             // Compact: boundary emulated in ``iban_glue_boundary_ok``.
             Regex::new(r"[A-Za-z]{2}\d{2}[A-Za-z0-9]{11,30}").unwrap(),
@@ -513,7 +517,7 @@ fn credit_card_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
     RES.get_or_init(|| {
         // One or more whitespace / dash / punct separators between digit groups.
-        let sep_space = r"[ \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}]";
+        let sep_space = SEP_SPACE;
         let sep = format!(r"(?:{sep_space}|[./\-\u{{2010}}-\u{{2015}}])+");
         vec![
             // 17–19 digit PANs (UnionPay, Maestro, Visa) group as 4-4-4-4-x.
@@ -895,37 +899,62 @@ fn location_valid(value: &str) -> bool {
 /// needs a degree sign, a minute mark, and a hemisphere letter before or after
 /// (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 /// glyphs stand in for ``'`` / ``"``.
-fn location_dms_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        // Spacing: ASCII whitespace or the group spaces (nbsp, thin / narrow
-        // nbsp); digits stay ASCII so every backend reads them alike.
-        let sep = format!(r"[ \t\r\n{}]", group_class(&GROUP_SPACES));
-        let body = format!(
-            r#"[0-9]{{1,3}}{sep}?[°º]{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?['′’](?:{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?(?:["″”]|''|′′))?"#
-        );
-        Regex::new(&format!(
-            r"(?:[NSZ]{sep}?{body}|{body}{sep}?[NSZ]){sep}{{0,3}}[,;/]?{sep}{{0,3}}(?:[EOW]{sep}?{body}|{body}{sep}?[EOW])"
-        ))
-        .unwrap()
-    })
+/// Spacing: the shared separator spaces plus line / page breaks, spelled out
+/// (not ``\s``) and with ASCII digits so every backend reads a pair alike.
+fn location_dms_pattern() -> String {
+    let sep = format!(r"(?:{SEP_SPACE}|[\f\v\x85\u{{2028}}\u{{2029}}])");
+    let body = format!(
+        r#"[0-9]{{1,3}}{sep}?[°º]{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?['′’](?:{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?(?:["″”]|''|′′))?"#
+    );
+    format!(
+        r"(?:[NSZ]{sep}?{body}|{body}{sep}?[NSZ]){sep}{{0,3}}[,;/]?{sep}{{0,3}}(?:[EOW]{sep}?{body}|{body}{sep}?[EOW])"
+    )
 }
 
-fn location_dms_boundary_ok(text: &str, start: usize, end: usize) -> bool {
-    // (?<![A-Za-z0-9_.]) … (?![A-Za-z0-9_])
-    if start > 0 {
-        let prev = text[..start].chars().next_back().unwrap();
-        if is_word_char(prev) || prev == '.' {
-            return false;
+fn location_dms_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&location_dms_pattern()).unwrap())
+}
+
+fn location_dms_full_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&format!("^(?:{})$", location_dms_pattern())).unwrap())
+}
+
+/// Emulate Python's ``(?![A-Za-z0-9_])`` backtracking: when the greedy hit
+/// runs into a word (``… 4°54' 12"x``), the pattern falls back to a shorter
+/// hit (without the optional seconds, or the spacing before them). Take the
+/// longest prefix that is a whole match with a clean right edge, then
+/// validate it; ``start`` rejects.
+fn location_dms_end(text: &str, start: usize, end: usize) -> usize {
+    if !location_dms_left_ok(text, start) {
+        return start;
+    }
+    let mut try_end = end;
+    while try_end > start {
+        let cand = &text[start..try_end];
+        if location_dms_right_ok(text, try_end) && location_dms_full_re().is_match(cand) {
+            return if location_dms_valid(cand) { try_end } else { start };
+        }
+        try_end -= 1;
+        while try_end > start && !text.is_char_boundary(try_end) {
+            try_end -= 1;
         }
     }
-    if end < text.len() {
-        let next = text[end..].chars().next().unwrap();
-        if is_word_char(next) {
-            return false;
-        }
-    }
-    true
+    start
+}
+
+/// ``(?<![A-Za-z0-9_.])`` before a DMS hit.
+fn location_dms_left_ok(text: &str, start: usize) -> bool {
+    text[..start]
+        .chars()
+        .next_back()
+        .is_none_or(|prev| !(is_word_char(prev) || prev == '.'))
+}
+
+/// ``(?![A-Za-z0-9_])`` after a DMS hit.
+fn location_dms_right_ok(text: &str, end: usize) -> bool {
+    text[end..].chars().next().is_none_or(|next| !is_word_char(next))
 }
 
 /// Numbers (``3`` / ``3.4`` / ``3,4``) in a DMS fragment.
@@ -981,11 +1010,11 @@ fn location_dms_valid(value: &str) -> bool {
 }
 
 fn scrub_location(text: &str) -> (Option<String>, u32) {
-    let (dms, dms_count) = replace_matches(
+    let (dms, dms_count) = replace_matches_end(
         text,
         location_dms_re(),
         "[LOCATION]",
-        |v, s, e| location_dms_boundary_ok(text, s, e) && location_dms_valid(v),
+        |s, e| location_dms_end(text, s, e),
         true,
     );
     let src = dms.as_deref().unwrap_or(text);
