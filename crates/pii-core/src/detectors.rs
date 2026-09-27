@@ -704,7 +704,7 @@ fn mac_dash_valid(value: &str) -> bool {
 }
 
 fn mac_dash_boundary_ok(text: &str, start: usize, end: usize) -> bool {
-    // (?<![\w.-]) … (?![\w.-])
+    // (?<![\w.-]) … (?![\w-])(?!\.\w): a sentence-ending ``.`` may follow.
     if start > 0 {
         let prev = text[..start].chars().next_back().unwrap();
         if is_word_char(prev) || prev == '.' || prev == '-' {
@@ -713,7 +713,10 @@ fn mac_dash_boundary_ok(text: &str, start: usize, end: usize) -> bool {
     }
     if end < text.len() {
         let next = text[end..].chars().next().unwrap();
-        if is_word_char(next) || next == '.' || next == '-' {
+        if is_word_char(next) || next == '-' {
+            return false;
+        }
+        if next == '.' && text[end + 1..].chars().next().is_some_and(is_word_char) {
             return false;
         }
     }
