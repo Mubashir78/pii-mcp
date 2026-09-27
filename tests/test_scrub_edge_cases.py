@@ -476,6 +476,10 @@ class TestLocationSubUnitPairs:
     def test_real_coordinate_still_masked(self) -> None:
         assert scrub_text("at 52.3676, 4.9041")["text"] == "at [LOCATION]"
 
+    def test_degree_sign_before_digits_backtracks(self) -> None:
+        # Python drops the optional ``°`` when a digit follows; Rust must too.
+        assert scrub_text("52.3676, 4.904152°22")["text"] == "[LOCATION]°22"
+
     def test_hemisphere_letter_not_glued_to_following_word(self) -> None:
         assert scrub_text("at 52.3676, 4.9041 exactly")["text"] == "at [LOCATION] exactly"
 
