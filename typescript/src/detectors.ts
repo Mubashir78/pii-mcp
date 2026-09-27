@@ -698,9 +698,9 @@ function locationValid(value: string): boolean {
 // needs a degree sign, a minute mark, and a hemisphere letter before or after
 // (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 // glyphs stand in for ``'`` / ``"``.
-const DMS_BODY = String.raw`\d{1,3}\s?[°º]\s?\d{1,2}(?:[.,]\d{1,4})?\s?['′’](?:\s?\d{1,2}(?:[.,]\d{1,4})?\s?(?:["″”]|''|′′))?`;
+const DMS_BODY = String.raw`[0-9]{1,3}[ \t\xa0]?[°º][ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?['′’](?:[ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?(?:["″”]|''|′′))?`;
 const LOCATION_DMS_RE = new RegExp(
-  String.raw`(?<![A-Za-z0-9_.])(?:[NSZ]\s?${DMS_BODY}|${DMS_BODY}\s?[NSZ])\s{0,3}[,;/]?\s{0,3}(?:[EOW]\s?${DMS_BODY}|${DMS_BODY}\s?[EOW])(?![A-Za-z0-9_])`,
+  String.raw`(?<![A-Za-z0-9_.])(?:[NSZ][ \t\xa0]?${DMS_BODY}|${DMS_BODY}[ \t\xa0]?[NSZ])[ \t\xa0]{0,3}[,;/]?[ \t\xa0]{0,3}(?:[EOW][ \t\xa0]?${DMS_BODY}|${DMS_BODY}[ \t\xa0]?[EOW])(?![A-Za-z0-9_])`,
   "g",
 );
 

@@ -674,15 +674,15 @@ def _location_valid(value: str) -> bool:
 # (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 # glyphs stand in for ``'`` / ``"``.
 _DMS_BODY = (
-    r"\d{1,3}\s?[°º]\s?\d{1,2}(?:[.,]\d{1,4})?\s?['′’]"
-    r"(?:\s?\d{1,2}(?:[.,]\d{1,4})?\s?(?:[\"″”]|''|′′))?"
+    r"[0-9]{1,3}[ \t\xa0]?[°º][ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?['′’]"
+    r"(?:[ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?(?:[\"″”]|''|′′))?"
 )
 LOCATION_DMS_RE = re.compile(
-    rf"(?<![A-Za-z0-9_.])(?:[NSZ]\s?{_DMS_BODY}|{_DMS_BODY}\s?[NSZ])"
-    rf"\s{{0,3}}[,;/]?\s{{0,3}}"
-    rf"(?:[EOW]\s?{_DMS_BODY}|{_DMS_BODY}\s?[EOW])(?![A-Za-z0-9_])"
+    rf"(?<![A-Za-z0-9_.])(?:[NSZ][ \t\xa0]?{_DMS_BODY}|{_DMS_BODY}[ \t\xa0]?[NSZ])"
+    rf"[ \t\xa0]{{0,3}}[,;/]?[ \t\xa0]{{0,3}}"
+    rf"(?:[EOW][ \t\xa0]?{_DMS_BODY}|{_DMS_BODY}[ \t\xa0]?[EOW])(?![A-Za-z0-9_])"
 )
-_DMS_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
+_DMS_NUMBER_RE = re.compile(r"[0-9]+(?:[.,][0-9]+)?")
 
 
 def _location_dms_valid(value: str) -> bool:

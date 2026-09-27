@@ -634,6 +634,9 @@ class TestDmsLocation:
             "52°72'3\"N 4°54'14\"E",
             "angle 45° 30' and 12° 5'",
             "12°C at 5' N",
+            # Non-ASCII digits / separators: no backend reads them as DMS.
+            "\u0665\u0662°22'N 4°54'E",
+            "52°\x1c22'N 4°54'E",
         ],
     )
     def test_non_coordinates_kept(self, text: str) -> None:

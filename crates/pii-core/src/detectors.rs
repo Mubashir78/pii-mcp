@@ -880,9 +880,9 @@ fn location_valid(value: &str) -> bool {
 fn location_dms_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        let body = r#"\d{1,3}\s?[°º]\s?\d{1,2}(?:[.,]\d{1,4})?\s?['′’](?:\s?\d{1,2}(?:[.,]\d{1,4})?\s?(?:["″”]|''|′′))?"#;
+        let body = r#"[0-9]{1,3}[ \t\u{a0}]?[°º][ \t\u{a0}]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\u{a0}]?['′’](?:[ \t\u{a0}]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\u{a0}]?(?:["″”]|''|′′))?"#;
         Regex::new(&format!(
-            r"(?:[NSZ]\s?{body}|{body}\s?[NSZ])\s{{0,3}}[,;/]?\s{{0,3}}(?:[EOW]\s?{body}|{body}\s?[EOW])"
+            r"(?:[NSZ][ \t\u{{a0}}]?{body}|{body}[ \t\u{{a0}}]?[NSZ])[ \t\u{{a0}}]{{0,3}}[,;/]?[ \t\u{{a0}}]{{0,3}}(?:[EOW][ \t\u{{a0}}]?{body}|{body}[ \t\u{{a0}}]?[EOW])"
         ))
         .unwrap()
     })
