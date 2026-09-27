@@ -629,6 +629,8 @@ class TestDmsLocation:
             "52°22'N\u20284°54'E",
             "52°22'N\f4°54'E",
             "52°22'N\v4°54'E",
+            "52°22'N\x854°54'E",
+            "52°22'N\u20294°54'E",
             "52°22,5'N 4°54,2'O",
             "52º22'3''N 4º54'14''E",
         ],
@@ -771,6 +773,7 @@ class TestInternationalizedEmail:
     @pytest.mark.parametrize(
         "text",
         [("\u7530\u4e2d" * 40 + "@a.b") * 5000, "a.b@" * 20000, "a@" * 100000],
+        ids=["unspaced-prose", "a.b@", "a@"],
     )
     def test_many_at_signs_scrub_in_linear_time(self, text: str) -> None:
         start = time.perf_counter()
