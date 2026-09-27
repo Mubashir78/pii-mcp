@@ -213,11 +213,11 @@ fn build_email_regex(pattern: &str) -> Regex {
         .unwrap()
 }
 
-/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). Candidates
-/// are one address long, so this anchored copy keeps the default DFA cache.
+/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). The domain
+/// has no length bound, so this anchored copy needs the same DFA cache.
 fn is_full_email(cand: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(&format!("^(?:{})$", email_pattern())).unwrap())
+    RE.get_or_init(|| build_email_regex(&format!("^(?:{})$", email_pattern())))
         .is_match(cand)
 }
 
@@ -322,8 +322,10 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
             match shortened {
                 Some(e) => end = e,
                 // Python's ``(?!@)`` never yields a match right before ``@``.
+                // Every start before this match's ``@`` shares its domain and
+                // fails the same way, so resume past that ``@``.
                 None if text[end..].starts_with('@') => {
-                    pos = start + 1;
+                    pos = start + text[start..end].find('@').map_or(1, |at| at + 1);
                     continue;
                 }
                 // No clean shorter end (letters glued after the TLD): mask the
