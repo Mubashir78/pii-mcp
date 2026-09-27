@@ -205,33 +205,39 @@ def _email_should_peel(text: str, start: int, end: int) -> bool:
     for try_end in range(end - 1, start, -1):
         if not text[try_end].isalpha():
             break
-        cand = text[start:try_end]
-        if EMAIL_RE.fullmatch(cand) is None:
+        # Cheap next-PII test first; the full email match rarely runs.
+        if _EMAIL_NEXT_PII_RE.match(text, try_end) is None:
             continue
-        if _EMAIL_NEXT_PII_RE.match(text, try_end) is not None:
+        if EMAIL_RE.fullmatch(text, start, try_end) is not None:
             return True
     return False
 
 
 _EMAIL_DOMAIN_RUN_RE = re.compile(r"[\w.-]*")
+_EMAIL_NON_LOCAL_RE = re.compile(r"[^\w.%+-]")
 
 
 def _find_email(text: str, pos: int) -> re.Match[str] | None:
     """Leftmost ``EMAIL_RE`` match at or after ``pos``.
 
     Unicode letter classes make every word of long prose a local-part
-    candidate, so the regex runs only on a window around each ``@``: 64
-    chars back (the local-part bound) and forward over the domain run plus
-    one char for ``(?!@)``. A match for one ``@`` always starts before any
-    match for the next (local parts exclude ``@``), so taking the ``@``s in
-    order keeps the whole-text result."""
+    candidate, so the regex is anchored per ``@`` instead of searched: a match
+    for this ``@`` starts at the leftmost local-part char before it (64 at
+    most, never past ``pos`` or an earlier ``@``), and whether it matches
+    depends only on the domain after the ``@``. Taking the ``@``s in order
+    keeps the whole-text search result, since a match for one ``@`` starts
+    before any match for the next."""
     at = text.find("@", pos)
     while at != -1:
         run_end = _EMAIL_DOMAIN_RUN_RE.match(text, at + 1).end()
         # No dot in the domain run: no TLD, so no address at this ``@``.
         if text.find(".", at + 1, run_end) != -1:
-            match = EMAIL_RE.search(text, max(pos, at - 64), min(len(text), run_end + 1))
-            if match is not None:
+            # Leftmost local-part start: the chars before the ``@`` up to the
+            # last non-local one, searched in the reversed 64-char window.
+            before = text[max(pos, at - 64) : at][::-1]
+            stop = _EMAIL_NON_LOCAL_RE.search(before)
+            start = at - (stop.start() if stop else len(before))
+            if start < at and (match := EMAIL_RE.match(text, start)) is not None:
                 return match
         at = text.find("@", at + 1)
     return None
