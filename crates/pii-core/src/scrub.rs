@@ -271,6 +271,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn decimal_location_backtracks_its_optional_tails() {
+        // Python's order: drop the E/W group, then the degree sign.
+        let r = scrub_text("52.3676, 4.9041°Ex", None, true).unwrap();
+        assert_eq!(r.text, "[LOCATION]°Ex");
+        let r = scrub_text("52.3676, 4.904152°22", None, true).unwrap();
+        assert_eq!(r.text, "[LOCATION]°22");
+        // Only two cuts: a long space run before the tail stays linear.
+        let text = format!("52.3676, 4.9041{}Ex", " ".repeat(20000));
+        let r = scrub_text(&text, None, true).unwrap();
+        assert_eq!(r.text, format!("[LOCATION]{}Ex", " ".repeat(20000)));
+    }
+
+    #[test]
     fn dms_seconds_glued_to_a_word_fall_back_to_minutes() {
         // Python's lookahead backtracks past the optional seconds; the
         // linear engine walks the end back instead.

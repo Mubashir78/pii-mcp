@@ -476,6 +476,16 @@ class TestLocationSubUnitPairs:
     def test_real_coordinate_still_masked(self) -> None:
         assert scrub_text("at 52.3676, 4.9041")["text"] == "at [LOCATION]"
 
+    def test_both_optional_tails_backtrack_in_order(self) -> None:
+        # The E/W group is dropped first, then the ``°``.
+        assert scrub_text("52.3676, 4.9041°Ex")["text"] == "[LOCATION]°Ex"
+
+    def test_long_space_run_before_tail_is_linear(self) -> None:
+        text = "52.3676, 4.9041" + " " * 40000 + "Ex"
+        start = time.perf_counter()
+        assert scrub_text(text)["text"] == "[LOCATION]" + " " * 40000 + "Ex"
+        assert time.perf_counter() - start < 5
+
     def test_degree_sign_before_digits_backtracks(self) -> None:
         # Python drops the optional ``°`` when a digit follows; Rust must too.
         assert scrub_text("52.3676, 4.904152°22")["text"] == "[LOCATION]°22"
