@@ -190,11 +190,12 @@ fn email_re() -> &'static Regex {
         // Letters and digits are Unicode (EAI / IDN: ``josé@example.com``,
         // ``ada@münchen.de``), matching Python's ``\w`` / ``[^\W_]``, except
         // that a TLD may not mix unspaced scripts with others (see
-        // ``UNSPACED_SCRIPTS``). Bounded Unicode classes need a larger
+        // ``UNSPACED_SCRIPTS``). TLD chars are ``[^\W\d_]`` as in Python:
+        // letters plus letter-like / other numerics (``Ⅻ``, ``²``). Bounded Unicode classes need a larger
         // lazy-DFA cache than the 2 MiB default, or big inputs fall back to
         // the ~30x slower NFA engine.
         regex::RegexBuilder::new(&format!(
-            r"{EMAIL_LOCAL}@[\p{{L}}\p{{N}}-]{{1,63}}(?:\.[\p{{L}}\p{{N}}-]{{1,63}})*\.(?:[\p{{L}}--{UNSPACED_SCRIPTS}]{{2,24}}|[\p{{L}}&&{UNSPACED_SCRIPTS}]{{2,24}})"
+            r"{EMAIL_LOCAL}@[\p{{L}}\p{{N}}-]{{1,63}}(?:\.[\p{{L}}\p{{N}}-]{{1,63}})*\.(?:[[\p{{L}}\p{{Nl}}\p{{No}}]--{UNSPACED_SCRIPTS}]{{2,24}}|[[\p{{L}}\p{{Nl}}\p{{No}}]&&{UNSPACED_SCRIPTS}]{{2,24}})"
         ))
         .dfa_size_limit(16 << 20)
         .build()
