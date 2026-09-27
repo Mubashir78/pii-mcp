@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from pii_mcp import scrub_text
+from pii_mcp.detectors import email_detector
 
 
 class TestIbanSeparatorGaps:
@@ -473,5 +476,379 @@ class TestLocationSubUnitPairs:
     def test_real_coordinate_still_masked(self) -> None:
         assert scrub_text("at 52.3676, 4.9041")["text"] == "at [LOCATION]"
 
+    def test_both_optional_tails_backtrack_in_order(self) -> None:
+        # The E/W group is dropped first, then the ``°``.
+        assert scrub_text("52.3676, 4.9041°Ex")["text"] == "[LOCATION]°Ex"
+
+    def test_long_space_run_before_tail_is_linear(self) -> None:
+        # 400k spaces: linear is milliseconds, a quadratic walk-back minutes.
+        text = "52.3676, 4.9041" + " " * 400_000 + "Ex"
+        start = time.perf_counter()
+        assert scrub_text(text)["text"] == "[LOCATION]" + " " * 400_000 + "Ex"
+        assert time.perf_counter() - start < 5
+
+    def test_degree_sign_before_digits_backtracks(self) -> None:
+        # Python drops the optional ``°`` when a digit follows; Rust must too.
+        assert scrub_text("52.3676, 4.904152°22")["text"] == "[LOCATION]°22"
+
     def test_hemisphere_letter_not_glued_to_following_word(self) -> None:
         assert scrub_text("at 52.3676, 4.9041 exactly")["text"] == "at [LOCATION] exactly"
+
+
+
+class TestNationalIdUnicodeSeparators:
+    """Word processors swap the typed space / hyphen for nbsp or a unicode dash."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "BSN 111\xa0222\xa0333",
+            "BSN 111\u202f222\u202f333",
+            "BSN 111\u2013222\u2013333",
+        ],
+    )
+    def test_bsn_unicode_separators(self, text: str) -> None:
+        result = scrub_text(text, languages=["nl"])
+        assert result["text"] == "BSN [BSN]"
+        assert result["counts"]["bsn"] == 1
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "SSN 219\u201309\u20139999",
+            "SSN 219\u201109\u20119999",
+            "SSN 219\u221209\u22129999",
+            "SSN 219\xa009\xa09999",
+            "SSN 219\u200909\u20099999",
+        ],
+    )
+    def test_ssn_unicode_separators(self, text: str) -> None:
+        result = scrub_text(text, languages=["en"])
+        assert result["text"] == "SSN [SSN]"
+        assert result["counts"]["ssn"] == 1
+
+    def test_mixed_dash_and_space_is_not_an_ssn(self) -> None:
+        # A mixed dash / space shape is not one of the SSN groupings.
+        assert scrub_text("pages 219\u201309 9999", languages=["en"])["counts"]["ssn"] == 0
+
+
+class TestGroupedGermanTaxId:
+    """Steuerbescheide and payslips print the IdNr as ``12 345 678 901``."""
+
+    @pytest.mark.parametrize(
+        "text",
+        ["IdNr 86 095 742 719", "IdNr 86\xa0095\xa0742\xa0719", "IdNr 86095742719"],
+    )
+    def test_grouped_tax_id(self, text: str) -> None:
+        result = scrub_text(text, languages=["de"])
+        assert result["text"] == "IdNr [TAX_ID]"
+        assert result["counts"]["tax_id"] == 1
+
+    def test_grouped_tax_id_wins_over_bsn_tail(self) -> None:
+        # ``482 956 513`` alone passes the BSN elfproef.
+        result = scrub_text("IdNr 57 482 956 513", languages=["nl", "de"])
+        assert result["text"] == "IdNr [TAX_ID]"
+        assert result["counts"]["bsn"] == 0
+
+    def test_grouped_checksum_failure_kept(self) -> None:
+        text = "IdNr 86 095 742 718"
+        assert scrub_text(text, languages=["de"])["text"] == text
+
+
+class TestPhoneSeparatorsAndTrunk:
+    """Unicode group separators and the ``(0)`` trunk in international form."""
+
+    @pytest.mark.parametrize(
+        ("text", "languages"),
+        [
+            ("tel +31\xa06\xa012345678", ["nl"]),
+            ("tel +31 6 1234\u20115678", ["nl"]),
+            ("tel +31\u20136\u201312345678", ["nl"]),
+            ("tel 06\xa012345678", ["nl"]),
+            ("tel 020\u2013123\xa04567", ["nl"]),
+            ("tel (555) 123\u20134567", ["en"]),
+            ("tel 555\u2009123\u20094567", ["en"]),
+            ("tel 030\xa012345678", ["de"]),
+            ("tel +44 (0) 20 7946 0958", ["en"]),
+            ("tel +49 (0) 30 1234 5678", ["de"]),
+        ],
+    )
+    def test_masked_whole(self, text: str, languages: list[str]) -> None:
+        result = scrub_text(text, languages=languages)
+        assert result["text"] == "tel [PHONE]"
+        assert result["counts"]["phone"] == 1
+
+    def test_span_cut_mid_group_does_not_leak_tail(self) -> None:
+        # 15 digits once the ``(0)`` trunk is left out; the regex span stops
+        # inside the last group, the rescan does not.
+        result = scrub_text("Tel +49 (0) 30 - 1234 - 5678901 x", languages=["de"])
+        assert result["text"] == "Tel [PHONE] x"
+
+    def test_french_pairs_ending_in_00(self) -> None:
+        result = scrub_text("See (+33 1 35 39 12 00) x", languages=["en"])
+        assert result["text"] == "See ([PHONE]) x"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Tel +31 (20) 123 4567 (06) 12345678 x",
+            "Tel +31 20 1234567 0031 6 12345678 x",
+            "Tel +31 20 1234567 020 7654321 x",
+            "Tel +31 6 12345678 06-12345678 x",
+            "Tel +31-20-1234567-0031-6-12345678 x",
+            "Tel 0031 20 1234567 0031 20 7654321 x",
+            "Tel +44 20 7946 0958 - 2024 x",
+            "Tel +44 20 7946 0958 12345 67890 x",
+            "Tel +32 2 123 45 67 02 765 43 21 x",
+            "Tel +44 (0) 20 - 7946 - 0958 - 020 - 7946 - 0959 x",
+            # Longer than any fixed scan window.
+            "Tel +44 (0) 20 7946 0958 (0) 20 7946 0959 (0) 20 7946 0960 (0) 20 7946 0961 x",
+        ],
+    )
+    def test_run_past_fifteen_digits_masked_whole(self, text: str) -> None:
+        # More than one number (or a number and more digits): no split point
+        # is reliable, so the whole run is masked rather than a tail leaked.
+        result = scrub_text(text, languages=["en", "nl"])
+        assert result["text"] == "Tel [PHONE] x"
+
+    def test_00_prefix_is_not_an_e164_digit(self) -> None:
+        result = scrub_text("call 0049 33204 1234567 now", languages=["de"])
+        assert result["text"] == "call [PHONE] now"
+
+    def test_non_ascii_digits(self) -> None:
+        text = "call +\u0663\u0661 \u0662\u0660 \u0661\u0662\u0663\u0664\u0665\u0666\u0667 now"
+        assert scrub_text(text, languages=["en"])["text"] == "call [PHONE] now"
+
+    def test_minus_sign_separator(self) -> None:
+        result = scrub_text("tel +31 20\u22121234567", languages=["nl"])
+        assert result["text"] == "tel [PHONE]"
+
+
+class TestDmsLocation:
+    """Degrees-minutes(-seconds) pairs as maps, EXIF, and GPS units print them."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "52°22'3.4\"N 4°54'14.8\"E",
+            "52° 22′ 03″ N, 4° 54′ 14″ E",
+            "33°52'4\"S 151°12'26\"W",
+            "N 52° 22.057' E 004° 54.246'",
+            "N 52° 22.057', E 4° 54.246'",
+            "52°22'N\n4°54'E",
+            "N 52° 22.057'\r\nE 4° 54.246'",
+            "52°\u202f22\u2032\u202fN 4°\u202f54\u2032\u202fE",
+            "52°22'N\u20094°54'E",
+            "52°22'N\u30004°54'E",
+            "52°22'N\u20074°54'E",
+            "52°22'N\u20284°54'E",
+            "52°22'N\f4°54'E",
+            "52°22'N\v4°54'E",
+            "52°22'N\x854°54'E",
+            "52°22'N\u20294°54'E",
+            "52°22,5'N 4°54,2'O",
+            "52º22'3''N 4º54'14''E",
+        ],
+    )
+    def test_dms_pair_masked(self, value: str) -> None:
+        result = scrub_text(f"at {value} today")
+        assert result["text"] == "at [LOCATION] today"
+        assert result["counts"]["location"] == 1
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("N 52°22' E 4°54'\n3''rd line", "[LOCATION]\n3''rd line"),
+            ("N 52°22' E 4°54' 12\"x", "[LOCATION] 12\"x"),
+        ],
+    )
+    def test_seconds_glued_to_a_word_fall_back_to_minutes(
+        self, text: str, expected: str
+    ) -> None:
+        # Python backtracks past the optional seconds; Rust must emulate it.
+        assert scrub_text(text)["text"] == expected
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "lat 52°22'3\"N only",
+            "95°22'3\"N 4°54'14\"E",
+            "52°72'3\"N 4°54'14\"E",
+            "angle 45° 30' and 12° 5'",
+            "12°C at 5' N",
+            # Non-ASCII digits / separators: no backend reads them as DMS.
+            "\u0665\u0662°22'N 4°54'E",
+            "52°\x1c22'N 4°54'E",
+        ],
+    )
+    def test_non_coordinates_kept(self, text: str) -> None:
+        assert scrub_text(text)["text"] == text
+
+
+class TestInternationalizedEmail:
+    """EAI local parts and IDN domains are as personal as ASCII addresses."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "josé@example.com",
+            "ada@münchen.de",
+            "ада@пример.рф",
+            "zoë.müller@bücher.example.de",
+        ],
+    )
+    def test_unicode_address_masked(self, value: str) -> None:
+        result = scrub_text(f"mail {value} ok")
+        assert result["text"] == "mail [EMAIL] ok"
+        assert result["counts"]["email"] == 1
+
+    def test_unicode_domain_does_not_eat_following_iban(self) -> None:
+        result = scrub_text("ada@münchen.deNL91ABNA0417164300")
+        assert result["text"] == "[EMAIL][IBAN]"
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("\u8bf7\u53d1\u9001\u81f3ada@example.com\u4ee5\u4fbf\u56de\u590d",
+             "[EMAIL]\u4ee5\u4fbf\u56de\u590d"),
+            ("mail ada@example.com\u4eca\u65e5", "mail [EMAIL]\u4eca\u65e5"),
+            # Hangul compatibility jamo (chat laughter) and CJK Ext B.
+            ("mail ada@example.com" + "\u314b" * 30, "mail [EMAIL]" + "\u314b" * 30),
+            ("mail ada@example.com\U00020000", "mail [EMAIL]\U00020000"),
+            ("\u0e2d\u0e35\u0e40\u0e21\u0e25ada@example.com\u0e04\u0e23\u0e31\u0e1a",
+             "\u0e2d\u0e35[EMAIL]\u0e04\u0e23\u0e31\u0e1a"),
+        ],
+    )
+    def test_unspaced_script_prose_around_address(self, text: str, expected: str) -> None:
+        # Scripts written without spaces glue prose onto the address. Prose
+        # after it stays; prose before it joins the local part (over-masked,
+        # since a mixed-script local part like ``田中123`` is a real name).
+        result = scrub_text(text)
+        assert result["text"] == expected
+        assert result["counts"]["email"] == 1
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "\u7530\u4e2d@example.jp",
+            "\u7530\u4e2d.\u592a\u90ce@example.jp",
+            "\u7530\u4e2d123@example.jp",
+            "\u7530\u4e2d.taro@example.jp",
+            "taro\u7530\u4e2d@example.jp",
+            "\uae40\ucca0\uc218@example.kr",
+            "\u5f20\u4f1f@\u516c\u53f8.\u4e2d\u56fd",
+            "ada@example.\u0e44\u0e17\u0e22",
+        ],
+    )
+    def test_unspaced_script_address_masked(self, value: str) -> None:
+        # Unspaced-script and mixed-script local parts are masked whole.
+        assert scrub_text(f"mail {value} ok")["text"] == "mail [EMAIL] ok"
+
+    @pytest.mark.parametrize("glue", ["a" * 30, "\ua188" * 30, "\ua98f" * 30])
+    def test_letters_glued_after_tld_do_not_leak(self, glue: str) -> None:
+        # Latin, Yi, Javanese: no clean end exists, so the match is masked
+        # as found (with part of the glue) instead of dropped.
+        result = scrub_text(f"mail ada@example.com{glue}")
+        assert result["text"].startswith("mail [EMAIL]")
+        assert "@" not in result["text"]
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [("x@y.\u216b\u216b x", "[EMAIL] x"), ("ada@example.de\u00bd x", "[EMAIL] x")],
+    )
+    def test_numeric_letters_in_tld_same_on_every_backend(
+        self, text: str, expected: str
+    ) -> None:
+        # Python's ``[^\W\d_]`` takes letter-like numerics; Rust / JS match it.
+        assert scrub_text(text)["text"] == expected
+
+    def test_letter_number_after_tld_is_not_peeled(self) -> None:
+        # ``Ⅻ`` is a TLD char but not a letter, so it is not the start of the
+        # next address (Python ``isalpha``; Rust must not use is_alphabetic).
+        assert scrub_text("ada@example.com\u216b1@b")["text"] == "[EMAIL]1@b"
+
+    # The pure-Python email detector is called directly: ``scrub_text`` may
+    # route to the native backend, which does not use the per-``@`` walk.
+
+    def test_local_part_longer_than_64_keeps_last_64(self) -> None:
+        # The anchored start is clamped to 64 chars before the ``@``.
+        for out in (scrub_text("x" * 70 + "@example.com")["text"],
+                    email_detector.scrub("x" * 70 + "@example.com")[0]):
+            assert out == "x" * 6 + "[EMAIL]"
+
+    def test_astral_local_part(self) -> None:
+        text = "mail \U0001d49cbc@example.com ok"
+        assert scrub_text(text)["text"] == "mail [EMAIL] ok"
+        assert email_detector.scrub(text)[0] == "mail [EMAIL] ok"
+
+    def test_long_domain_with_glued_tld_is_masked_quickly(self) -> None:
+        # The shortening walk is capped; past the cap the match is masked as
+        # found. Runs on every backend (scrub_text) and the Python detector.
+        text = "a@" + "b." * 20000 + "c" * 30
+        for scrub in (lambda t: scrub_text(t)["text"], lambda t: email_detector.scrub(t)[0]):
+            start = time.perf_counter()
+            assert scrub(text) == "[EMAIL]" + "c" * 6
+            assert time.perf_counter() - start < 5
+
+    def test_shorter_address_before_at_found_past_the_walk_cap(self) -> None:
+        # Python's ``(?!@)`` backtracks to ``a@ex.com``; Rust must reach the
+        # same span even though it lies past the shortening walk's cap.
+        text = "a@ex.com." + "1" * 63 + "." + "1" * 63 + ".xx@y"
+        assert scrub_text(text)["text"] == "[EMAIL]" + text[len("a@ex.com"):]
+
+    def test_retry_after_at_does_not_rewalk(self) -> None:
+        text = "a" * 64 + "@" + "b." * 4000 + "cc@"
+        start = time.perf_counter()
+        assert scrub_text(text)["text"] == text
+        assert time.perf_counter() - start < 5
+
+    def test_second_address_starts_after_first(self) -> None:
+        # The walk for the second ``@`` stops at the end of the first match.
+        assert email_detector.scrub("a@x.com.b@y.com")[0] == "[EMAIL][EMAIL]"
+
+    @pytest.mark.parametrize(
+        "text",
+        [("\u7530\u4e2d" * 40 + "@a.b") * 5000, "a.b@" * 20000, "a@" * 100000],
+        ids=["unspaced-prose", "a.b@", "a@"],
+    )
+    def test_many_at_signs_scrub_in_linear_time(self, text: str) -> None:
+        start = time.perf_counter()
+        email_detector.scrub(text)
+        assert time.perf_counter() - start < 5
+
+    def test_digit_tld_still_rejected(self) -> None:
+        assert scrub_text("x@y.c0m")["text"] == "x@y.c0m"
+
+
+class TestDashGroupedMac:
+    """Huawei / H3C switches print MACs as ``aabb-ccdd-eeff``."""
+
+    @pytest.mark.parametrize("value", ["00e0-fc12-3456", "AABB-CCDD-EEFF", "5489-98ab-cdef"])
+    def test_masked(self, value: str) -> None:
+        result = scrub_text(f"mac {value} up")
+        assert result["text"] == "mac [MAC] up"
+        assert result["counts"]["mac"] == 1
+
+    def test_sentence_end_period(self) -> None:
+        assert scrub_text("Device MAC is 00e0-fc12-3456.")["text"] == "Device MAC is [MAC]."
+        # A dotted token continuing past the MAC is not a MAC.
+        assert scrub_text("v 00e0-fc12-3456.bin")["counts"]["mac"] == 0
+
+    def test_mixed_case_masked(self) -> None:
+        # A hand-typed MAC may mix cases; recall over the rare all-hex key.
+        assert scrub_text("mac 00E0-fc12-3456 up")["text"] == "mac [MAC] up"
+
+    def test_non_ascii_letter_before_is_a_boundary(self) -> None:
+        # Same ASCII word boundary as the Rust / JS backends.
+        assert scrub_text("mac:ж00e0-fc12-3456")["text"] == "mac:ж[MAC]"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "part 1234-5678-9012 shipped",
+            "id 4d95a28a-0833-4533-82c1-de09362e46d1",
+            "ref aabb-ccdd-eeff-0011",
+        ],
+    )
+    def test_not_mac(self, text: str) -> None:
+        assert scrub_text(text)["counts"]["mac"] == 0

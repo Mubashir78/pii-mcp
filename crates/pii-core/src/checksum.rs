@@ -155,18 +155,46 @@ pub fn nl_passport_valid(value: &str) -> bool {
     true
 }
 
+/// Group separators the national-id patterns accept: space, dot, hyphen,
+/// slash, nbsp, thin / narrow nbsp, and unicode dashes / minus sign.
+fn is_id_sep(c: char) -> bool {
+    matches!(c, ' ' | '.' | '-' | '/') || is_group_sep(c)
+}
+
+/// Group separators word processors / PDFs substitute for a typed space or
+/// hyphen in ids and phone numbers: nbsp, thin / narrow nbsp, unicode dashes
+/// and the minus sign. The detector patterns build their classes from these.
+pub(crate) const GROUP_SPACES: [char; 3] = ['\u{00a0}', '\u{2009}', '\u{202f}'];
+pub(crate) const GROUP_DASHES: [char; 7] = [
+    '\u{2010}', '\u{2011}', '\u{2012}', '\u{2013}', '\u{2014}', '\u{2015}', '\u{2212}',
+];
+
+pub(crate) fn is_group_sep(c: char) -> bool {
+    GROUP_SPACES.contains(&c) || GROUP_DASHES.contains(&c)
+}
+
 /// Dutch BSN 11-check (8–9 digits, zero-padded to 9). Accepts spaced/dotted/hyphen groups.
 pub fn bsn_valid(value: &str) -> bool {
+    bsn_valid_with(value, |c| matches!(c, ' ' | '.' | '-'))
+}
+
+/// ``bsn_valid`` for scrub hits: group separators (see ``is_id_sep``) are
+/// skipped wherever they appear, since the scrub patterns fix the grouping.
+pub(crate) fn bsn_valid_grouped(value: &str) -> bool {
+    bsn_valid_with(value, is_id_sep)
+}
+
+fn bsn_valid_with(value: &str, is_sep: fn(char) -> bool) -> bool {
     let mut digits = [0u8; 9];
     let mut len = 0usize;
-    for b in value.bytes() {
-        if b == b' ' || b == b'.' || b == b'-' {
+    for c in value.chars() {
+        if is_sep(c) {
             continue;
         }
-        if !b.is_ascii_digit() || len >= 9 {
+        if !c.is_ascii_digit() || len >= 9 {
             return false;
         }
-        digits[len] = b;
+        digits[len] = c as u8;
         len += 1;
     }
     if !(8..=9).contains(&len) {
@@ -189,16 +217,26 @@ pub fn bsn_valid(value: &str) -> bool {
 /// SSA rejects: area 000/666/9xx, group 00, serial 0000.
 /// Also drops obvious fakes (all-same digit, 123456789 / 987654321).
 pub fn ssn_valid(value: &str) -> bool {
+    ssn_valid_with(value, |c| matches!(c, '-' | ' ' | '.' | '/'))
+}
+
+/// ``ssn_valid`` for scrub hits: group separators (see ``is_id_sep``) are
+/// skipped wherever they appear, since the scrub patterns fix the grouping.
+pub(crate) fn ssn_valid_grouped(value: &str) -> bool {
+    ssn_valid_with(value, is_id_sep)
+}
+
+fn ssn_valid_with(value: &str, is_sep: fn(char) -> bool) -> bool {
     let mut digits = [0u8; 9];
     let mut len = 0usize;
-    for b in value.bytes() {
-        if b == b'-' || b == b' ' || b == b'.' || b == b'/' {
+    for c in value.chars() {
+        if is_sep(c) {
             continue;
         }
-        if !b.is_ascii_digit() || len >= 9 {
+        if !c.is_ascii_digit() || len >= 9 {
             return false;
         }
-        digits[len] = b;
+        digits[len] = c as u8;
         len += 1;
     }
     if len != 9 {
@@ -231,15 +269,37 @@ fn ssn_obviously_fake(digits: &[u8; 9]) -> bool {
     digits == b"123456789" || digits == b"987654321"
 }
 
-/// German Steuer-IdNr: structure + mod-11/10 check digit.
-pub fn tax_id_valid(digits: &str) -> bool {
-    if digits.len() != 11 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+/// German Steuer-IdNr: structure + mod-11/10 check digit (11 compact digits).
+pub fn tax_id_valid(value: &str) -> bool {
+    tax_id_valid_with(value, |_| false)
+}
+
+/// ``tax_id_valid`` for scrub hits: group separators (see ``is_id_sep``) are
+/// skipped wherever they appear, since the scrub patterns fix the grouping.
+pub(crate) fn tax_id_valid_grouped(value: &str) -> bool {
+    tax_id_valid_with(value, is_id_sep)
+}
+
+fn tax_id_valid_with(value: &str, is_sep: fn(char) -> bool) -> bool {
+    let mut buf = [0u8; 11];
+    let mut len = 0usize;
+    for c in value.chars() {
+        if is_sep(c) {
+            continue;
+        }
+        if !c.is_ascii_digit() || len >= 11 {
+            return false;
+        }
+        buf[len] = c as u8;
+        len += 1;
+    }
+    if len != 11 {
         return false;
     }
-    if digits.as_bytes()[0] == b'0' {
+    if buf[0] == b'0' {
         return false;
     }
-    let body = &digits.as_bytes()[..10];
+    let body = &buf[..10];
     let mut counts = [0u8; 10];
     for &b in body {
         counts[(b - b'0') as usize] += 1;
@@ -267,7 +327,7 @@ pub fn tax_id_valid(digits: &str) -> bool {
     if check == 10 {
         check = 0;
     }
-    check == (digits.as_bytes()[10] - b'0') as u32
+    check == (buf[10] - b'0') as u32
 }
 
 const NL_POSTCODE_REJECTS: &[&str] = &["SA", "SD", "SS"];
@@ -359,6 +419,19 @@ mod tests {
     fn tax_id_known() {
         assert!(tax_id_valid("36574261809"));
         assert!(!tax_id_valid("36574261890"));
+    }
+
+    #[test]
+    fn public_validators_keep_their_separator_rules() {
+        // Scrub hits use the ``*_grouped`` variants; the public API does not
+        // widen to every group separator.
+        assert!(!tax_id_valid("36 574 261 809"));
+        assert!(tax_id_valid_grouped("36 574 261 809"));
+        assert!(!bsn_valid("111/222/333"));
+        assert!(bsn_valid("111-222-333"));
+        assert!(bsn_valid_grouped("111\u{2013}222\u{2013}333"));
+        assert!(!ssn_valid("219\u{2013}09\u{2013}9999"));
+        assert!(ssn_valid_grouped("219\u{2013}09\u{2013}9999"));
     }
 
     #[test]
