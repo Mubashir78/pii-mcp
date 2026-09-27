@@ -283,6 +283,21 @@ mod tests {
     }
 
     #[test]
+    fn email_before_at_backtracks_like_python() {
+        // ``(?!@)`` emulation: the span Python's backtracking picks, even when
+        // it lies past the shortening walk's cap.
+        let text = format!("a@ex.com.{}.{}.xx@y", "1".repeat(63), "1".repeat(63));
+        let r = scrub_text(&text, None, true).unwrap();
+        assert_eq!(r.text, format!("[EMAIL]{}", &text["a@ex.com".len()..]));
+        // No quadratic re-walk when a long domain runs into ``@``.
+        let text = format!("{}@{}cc@", "a".repeat(64), "b.".repeat(2000));
+        assert_eq!(scrub_text(&text, None, true).unwrap().text, text);
+        // Capped walk: a long domain with a glued TLD is masked as found.
+        let text = format!("a@{}{}", "b.".repeat(2000), "c".repeat(30));
+        assert_eq!(scrub_text(&text, None, true).unwrap().text, "[EMAIL]cccccc");
+    }
+
+    #[test]
     fn masks_email() {
         let r = scrub_text("Contact ada@example.com for help", None, true).unwrap();
         assert_eq!(r.text, "Contact [EMAIL] for help");

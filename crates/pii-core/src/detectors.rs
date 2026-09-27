@@ -213,17 +213,31 @@ fn build_email_regex(pattern: &str) -> Regex {
         .unwrap()
 }
 
-/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). The domain
-/// has no length bound, so this anchored copy needs the same DFA cache.
+/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). The capped
+/// shortening walk calls it at most ``EMAIL_SHORTEN_SPAN`` times per hit, so
+/// it keeps the default DFA cache.
 fn is_full_email(cand: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| build_email_regex(&format!("^(?:{})$", email_pattern())))
+    RE.get_or_init(|| Regex::new(&format!("^(?:{})$", email_pattern())).unwrap())
         .is_match(cand)
 }
 
+/// ``EMAIL_RE`` with Python's trailing ``(?!@)``: the linear engine has no
+/// lookahead, so the address is group 1 and a following non-``@`` char (or
+/// the end of text) must match too. Leftmost-first then picks the span
+/// Python's backtracking does (a shorter TLD / domain when the greedy one
+/// runs into ``@``).
 fn email_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| build_email_regex(&email_pattern()))
+    RE.get_or_init(|| build_email_regex(&format!(r"({})(?:[^@]|\z)", email_pattern())))
+}
+
+/// Span of the leftmost address at or after ``pos`` (group 1 of ``email_re``).
+fn find_email_at(text: &str, pos: usize) -> Option<(usize, usize)> {
+    let m = email_re().find_at(text, pos)?;
+    // The leftmost match from ``m.start()`` is ``m`` itself; read its group.
+    let address = email_re().captures_at(text, m.start())?.get(1)?;
+    Some((address.start(), address.end()))
 }
 
 /// Python/JS shorten when ``(?!@)`` is not enough — TLD may also absorb a
@@ -309,14 +323,11 @@ fn email_should_peel(text: &str, start: usize, end: usize) -> bool {
 }
 
 fn scrub_email(text: &str) -> (Option<String>, u32) {
-    let pattern = email_re();
     let mut count = 0u32;
     let mut out: Option<String> = None;
     let mut last = 0usize;
     let mut pos = 0usize;
-    while let Some(m) = pattern.find_at(text, pos) {
-        let start = m.start();
-        let mut end = m.end();
+    while let Some((start, mut end)) = find_email_at(text, pos) {
         if !email_end_ok(text, end) || email_should_peel(text, start, end) {
             // Only ends before the greedy one (it already failed the checks),
             // and within ``EMAIL_SHORTEN_SPAN`` chars of it: a clean shorter
@@ -328,18 +339,10 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
             let shortened = longest_end(text, floor, before_end, |e| {
                 is_full_email(&text[start..e]) && email_end_ok(text, e)
             });
-            match shortened {
-                Some(e) => end = e,
-                // Python's ``(?!@)`` never yields a match right before ``@``.
-                // Every start before this match's ``@`` shares its domain and
-                // fails the same way, so resume past that ``@``.
-                None if text[end..].starts_with('@') => {
-                    pos = start + text[start..end].find('@').map_or(1, |at| at + 1);
-                    continue;
-                }
-                // No clean shorter end (letters glued after the TLD): mask the
-                // match as found rather than leak the address.
-                None => {}
+            // No clean shorter end (letters glued after the TLD): mask the
+            // match as found rather than leak the address.
+            if let Some(e) = shortened {
+                end = e;
             }
         }
         let buf = out.get_or_insert_with(|| String::with_capacity(text.len()));
