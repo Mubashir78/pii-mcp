@@ -775,6 +775,12 @@ class TestInternationalizedEmail:
             assert scrub(text) == "[EMAIL]" + "c" * 6
             assert time.perf_counter() - start < 5
 
+    def test_shorter_address_before_at_found_past_the_walk_cap(self) -> None:
+        # Python's ``(?!@)`` backtracks to ``a@ex.com``; Rust must reach the
+        # same span even though it lies past the shortening walk's cap.
+        text = "a@ex.com." + "1" * 63 + "." + "1" * 63 + ".xx@y"
+        assert scrub_text(text)["text"] == "[EMAIL]" + text[len("a@ex.com"):]
+
     def test_retry_after_at_does_not_rewalk(self) -> None:
         text = "a" * 64 + "@" + "b." * 4000 + "cc@"
         start = time.perf_counter()
