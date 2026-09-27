@@ -213,12 +213,12 @@ fn build_email_regex(pattern: &str) -> Regex {
         .unwrap()
 }
 
-/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). The capped
-/// shortening walk calls it at most ``EMAIL_SHORTEN_SPAN`` times per hit, so
-/// it keeps the default DFA cache.
+/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). Each call
+/// scans the whole candidate, and the domain has no length bound, so this
+/// anchored copy needs the same DFA cache as ``email_re``.
 fn is_full_email(cand: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(&format!("^(?:{})$", email_pattern())).unwrap())
+    RE.get_or_init(|| build_email_regex(&format!("^(?:{})$", email_pattern())))
         .is_match(cand)
 }
 
@@ -235,7 +235,13 @@ fn email_re() -> &'static Regex {
 /// Span of the leftmost address at or after ``pos`` (group 1 of ``email_re``).
 fn find_email_at(text: &str, pos: usize) -> Option<(usize, usize)> {
     let m = email_re().find_at(text, pos)?;
-    // The leftmost match from ``m.start()`` is ``m`` itself; read its group.
+    if m.end() < text.len() {
+        // ``\z`` only matches at the end of text, so the match ends with the
+        // one ``[^@]`` char after the address: drop it, no captures needed.
+        let last = m.as_str().chars().next_back()?;
+        return Some((m.start(), m.end() - last.len_utf8()));
+    }
+    // At the end of text the tail may be ``\z`` or a last char; ask group 1.
     let address = email_re().captures_at(text, m.start())?.get(1)?;
     Some((address.start(), address.end()))
 }
