@@ -897,9 +897,14 @@ fn location_valid(value: &str) -> bool {
 fn location_dms_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        let body = r#"[0-9]{1,3}[ \t\u{a0}]?[°º][ \t\u{a0}]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\u{a0}]?['′’](?:[ \t\u{a0}]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\u{a0}]?(?:["″”]|''|′′))?"#;
+        // Spacing: ASCII whitespace or the group spaces (nbsp, thin / narrow
+        // nbsp); digits stay ASCII so every backend reads them alike.
+        let sep = format!(r"[ \t\r\n{}]", group_class(&GROUP_SPACES));
+        let body = format!(
+            r#"[0-9]{{1,3}}{sep}?[°º]{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?['′’](?:{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?(?:["″”]|''|′′))?"#
+        );
         Regex::new(&format!(
-            r"(?:[NSZ][ \t\u{{a0}}]?{body}|{body}[ \t\u{{a0}}]?[NSZ])[ \t\u{{a0}}]{{0,3}}[,;/]?[ \t\u{{a0}}]{{0,3}}(?:[EOW][ \t\u{{a0}}]?{body}|{body}[ \t\u{{a0}}]?[EOW])"
+            r"(?:[NSZ]{sep}?{body}|{body}{sep}?[NSZ]){sep}{{0,3}}[,;/]?{sep}{{0,3}}(?:[EOW]{sep}?{body}|{body}{sep}?[EOW])"
         ))
         .unwrap()
     })

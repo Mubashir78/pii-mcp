@@ -673,14 +673,17 @@ def _location_valid(value: str) -> bool:
 # needs a degree sign, a minute mark, and a hemisphere letter before or after
 # (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 # glyphs stand in for ``'`` / ``"``.
+# Spacing inside a DMS pair: ASCII whitespace or the group spaces (nbsp,
+# thin / narrow nbsp); digits stay ASCII so every backend reads them alike.
+_DMS_SEP = f"[ \\t\\r\\n{_GROUP_SPACES}]"
 _DMS_BODY = (
-    r"[0-9]{1,3}[ \t\xa0]?[°º][ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?['′’]"
-    r"(?:[ \t\xa0]?[0-9]{1,2}(?:[.,][0-9]{1,4})?[ \t\xa0]?(?:[\"″”]|''|′′))?"
+    rf"[0-9]{{1,3}}{_DMS_SEP}?[°º]{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?['′’]"
+    rf"(?:{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?(?:[\"″”]|''|′′))?"
 )
 LOCATION_DMS_RE = re.compile(
-    rf"(?<![A-Za-z0-9_.])(?:[NSZ][ \t\xa0]?{_DMS_BODY}|{_DMS_BODY}[ \t\xa0]?[NSZ])"
-    rf"[ \t\xa0]{{0,3}}[,;/]?[ \t\xa0]{{0,3}}"
-    rf"(?:[EOW][ \t\xa0]?{_DMS_BODY}|{_DMS_BODY}[ \t\xa0]?[EOW])(?![A-Za-z0-9_])"
+    rf"(?<![A-Za-z0-9_.])(?:[NSZ]{_DMS_SEP}?{_DMS_BODY}|{_DMS_BODY}{_DMS_SEP}?[NSZ])"
+    rf"{_DMS_SEP}{{0,3}}[,;/]?{_DMS_SEP}{{0,3}}"
+    rf"(?:[EOW]{_DMS_SEP}?{_DMS_BODY}|{_DMS_BODY}{_DMS_SEP}?[EOW])(?![A-Za-z0-9_])"
 )
 _DMS_NUMBER_RE = re.compile(r"[0-9]+(?:[.,][0-9]+)?")
 
