@@ -417,6 +417,14 @@ describe("scrubText", () => {
       "mail [EMAIL] ok",
     );
     expect(emailDetector.scrub("a@x.com.b@y.com").text).toBe("[EMAIL][EMAIL]");
+    {
+      // Capped shortening walk: a long domain with a glued TLD stays fast.
+      const start = performance.now();
+      expect(scrubText("a@" + "b.".repeat(20000) + "c".repeat(30)).text).toBe(
+        "[EMAIL]" + "c".repeat(6),
+      );
+      expect(performance.now() - start).toBeLessThan(5000);
+    }
     for (const text of [
       ("\u7530\u4e2d".repeat(40) + "@a.b").repeat(5000),
       "a.b@".repeat(20000),

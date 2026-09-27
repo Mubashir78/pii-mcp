@@ -201,6 +201,11 @@ def _email_end_ok(text: str, end: int) -> bool:
     return _EMAIL_NEXT_PII_RE.match(text, end) is not None
 
 
+# How far back from a greedy email end to look for a clean shorter one
+# (24-char TLD + 63-char label, with room); bounds the per-end full match.
+_EMAIL_SHORTEN_SPAN = 128
+
+
 def _email_should_peel(text: str, start: int, end: int) -> bool:
     """True when trailing TLD letters belong to following letter-led PII (MAC)."""
     for try_end in range(end - 1, start, -1):
@@ -257,9 +262,10 @@ def _scrub_email(text: str) -> tuple[str, int]:
         start, end = match.start(), match.end()
         if not _email_end_ok(text, end) or _email_should_peel(text, start, end):
             shortened = None
-            for try_end in range(end - 1, start, -1):
-                cand = text[start:try_end]
-                if EMAIL_RE.fullmatch(cand) is None:
+            # A clean shorter end sits within a TLD and a label of the greedy
+            # one; past that, the fallback below masks the match as found.
+            for try_end in range(end - 1, max(start, end - _EMAIL_SHORTEN_SPAN), -1):
+                if EMAIL_RE.fullmatch(text, start, try_end) is None:
                     continue
                 if _email_end_ok(text, try_end):
                     shortened = try_end
