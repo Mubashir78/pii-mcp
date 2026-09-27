@@ -276,8 +276,10 @@ mod tests {
         // linear engine walks the end back instead.
         let r = scrub_text("N 52°22' E 4°54' 12\"x", None, true).unwrap();
         assert_eq!(r.text, "[LOCATION] 12\"x");
-        let r = scrub_text("52°22'N\u{3000}4°54'E", None, true).unwrap();
-        assert_eq!(r.text, "[LOCATION]");
+        for sep in ['\u{3000}', '\u{0c}', '\u{0b}', '\u{85}', '\u{2028}', '\u{2029}'] {
+            let r = scrub_text(&format!("52°22'N{sep}4°54'E"), None, true).unwrap();
+            assert_eq!(r.text, "[LOCATION]", "separator {sep:?}");
+        }
     }
 
     #[test]
