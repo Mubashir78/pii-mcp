@@ -1372,52 +1372,42 @@ fn is_decimal(c: char) -> bool {
 
 /// End of the run of digit groups starting at ``start`` (``start`` rejects).
 ///
-/// The run is rescanned from ``start`` (64 chars of groups and separators,
-/// whole groups only) so a group the regex span cut in half never counts. It
-/// needs 8+ digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15
-/// digits it holds more than one number (``… 1234567 (06) 12345678``,
+/// The run is rescanned from ``start`` to its end, so neither the regex span
+/// nor a scan window can stop inside it and leave a group out. It needs 8+
+/// digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15 digits it
+/// holds more than one number (``… 1234567 (06) 12345678``,
 /// ``… 0958 - 020 7946 …``); no split point is reliable, and any tail left out
 /// could be a subscriber part, so the whole run is masked.
 fn phone_international_end(text: &str, start: usize) -> usize {
-    // The 64-char window plus one char to see whether a group goes on.
-    let mut chars = [(0usize, '\0'); 65];
-    let mut n = 0usize;
-    for (i, c) in text[start..].char_indices().take(chars.len()) {
-        chars[n] = (start + i, c);
-        n += 1;
-    }
-    let at = |k: usize| (k < n).then(|| chars[k].1);
-    let end_of = |k: usize| if k < n { chars[k].0 } else { text.len() };
-    let limit = n.min(64);
-    let mut end = start;
-    let mut digits = 0usize;
-    let mut k = if at(0) == Some('0') && at(1) == Some('0') {
+    let rest = &text[start..];
+    let mut i = if rest.starts_with("00") {
         2
     } else {
-        usize::from(at(0) == Some('+'))
+        usize::from(rest.starts_with('+'))
     };
-    while k < limit {
-        let c = chars[k].1;
+    let mut end = start;
+    let mut digits = 0usize;
+    let mut prev = '\0';
+    while let Some(c) = rest[i..].chars().next() {
         if is_phone_international_sep(c) {
-            k += 1;
+            prev = c;
+            i += c.len_utf8();
             continue;
         }
         if !is_decimal(c) {
             break;
         }
-        if k > 0 && at(k - 1) == Some('(') && c == '0' && at(k + 1) == Some(')') {
-            k += 1;
+        if prev == '(' && c == '0' && rest[i + 1..].starts_with(')') {
+            prev = c;
+            i += 1;
             continue;
         }
-        let run = k;
-        while k < limit && is_decimal(chars[k].1) {
-            k += 1;
+        while let Some(d) = rest[i..].chars().next().filter(|&d| is_decimal(d)) {
+            digits += 1;
+            prev = d;
+            i += d.len_utf8();
         }
-        if at(k).is_some_and(is_decimal) {
-            break; // the group runs past the window
-        }
-        digits += k - run;
-        end = end_of(k);
+        end = start + i;
     }
     if digits >= 8 {
         end

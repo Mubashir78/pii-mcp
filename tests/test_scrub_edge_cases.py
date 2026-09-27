@@ -583,6 +583,8 @@ class TestPhoneSeparatorsAndTrunk:
             "Tel +44 20 7946 0958 12345 67890 x",
             "Tel +32 2 123 45 67 02 765 43 21 x",
             "Tel +44 (0) 20 - 7946 - 0958 - 020 - 7946 - 0959 x",
+            # Longer than any fixed scan window.
+            "Tel +44 (0) 20 7946 0958 (0) 20 7946 0959 (0) 20 7946 0960 (0) 20 7946 0961 x",
         ],
     )
     def test_run_past_fifteen_digits_masked_whole(self, text: str) -> None:
