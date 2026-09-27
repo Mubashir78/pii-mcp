@@ -481,9 +481,10 @@ class TestLocationSubUnitPairs:
         assert scrub_text("52.3676, 4.9041°Ex")["text"] == "[LOCATION]°Ex"
 
     def test_long_space_run_before_tail_is_linear(self) -> None:
-        text = "52.3676, 4.9041" + " " * 40000 + "Ex"
+        # 400k spaces: linear is milliseconds, a quadratic walk-back minutes.
+        text = "52.3676, 4.9041" + " " * 400_000 + "Ex"
         start = time.perf_counter()
-        assert scrub_text(text)["text"] == "[LOCATION]" + " " * 40000 + "Ex"
+        assert scrub_text(text)["text"] == "[LOCATION]" + " " * 400_000 + "Ex"
         assert time.perf_counter() - start < 5
 
     def test_degree_sign_before_digits_backtracks(self) -> None:
