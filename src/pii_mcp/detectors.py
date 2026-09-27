@@ -677,7 +677,7 @@ def _location_valid(value: str) -> bool:
 # Spacing inside a DMS pair: the shared separator spaces plus line / page
 # breaks, spelled out (not ``\s``) and with ASCII digits so every backend
 # reads a pair alike.
-_DMS_SEP = rf"(?:{_SEP_SPACE}|[\f\v\x85\u2028\u2029])"
+_DMS_SEP = _SEP_SPACE.removesuffix("]") + r"\f\v\x85\u2028\u2029]"
 _DMS_BODY = (
     rf"[0-9]{{1,3}}{_DMS_SEP}?[°º]{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?['′’]"
     rf"(?:{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?(?:[\"″”]|''|′′))?"

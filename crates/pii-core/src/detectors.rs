@@ -314,16 +314,9 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
         let start = m.start();
         let mut end = m.end();
         if !email_end_ok(text, end) || email_should_peel(text, start, end) {
-            let mut shortened = None;
-            for try_end in (start + 1..end).rev() {
-                if !text.is_char_boundary(try_end) {
-                    continue;
-                }
-                if is_full_email(&text[start..try_end]) && email_end_ok(text, try_end) {
-                    shortened = Some(try_end);
-                    break;
-                }
-            }
+            let shortened = longest_end(text, start, end, |e| {
+                e < end && is_full_email(&text[start..e]) && email_end_ok(text, e)
+            });
             match shortened {
                 Some(e) => end = e,
                 // Python's ``(?!@)`` never yields a match right before ``@``.
@@ -352,29 +345,28 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
     }
 }
 
-/// Unicode Zs separators commonly used in OCR / rich text (thin / figure /
-/// nbsp …), shared by the IBAN, card, and DMS patterns.
+/// Spacing between groups: space, tab, CR / LF, and the Unicode Zs spaces
+/// OCR and rich text use (nbsp, thin / figure / ideographic …). Shared by the
+/// IBAN, card, and DMS patterns.
 const SEP_SPACE: &str = r"[ \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}]";
 
 fn iban_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
     RES.get_or_init(|| {
-        // Unicode Zs separators commonly used in OCR / rich text.
-        let sep = SEP_SPACE;
         vec![
             // Compact: boundary emulated in ``iban_glue_boundary_ok``.
             Regex::new(r"[A-Za-z]{2}\d{2}[A-Za-z0-9]{11,30}").unwrap(),
             Regex::new(&format!(
-                r"\b[A-Z]{{2}}\d{{2}}(?:{sep}?[A-Z0-9]{{1,4}}){{3,8}}\b"
+                r"\b[A-Z]{{2}}\d{{2}}(?:{SEP_SPACE}?[A-Z0-9]{{1,4}}){{3,8}}\b"
             ))
             .unwrap(),
             Regex::new(&format!(
-                r"\b[a-z]{{2}}\d{{2}}(?:{sep}?[a-z0-9]{{1,4}}){{3,8}}\b"
+                r"\b[a-z]{{2}}\d{{2}}(?:{SEP_SPACE}?[a-z0-9]{{1,4}}){{3,8}}\b"
             ))
             .unwrap(),
             // Mixed case / hyphen|slash|dot|whitespace groups (one or more seps).
             Regex::new(&format!(
-                r"[A-Za-z]{{2}}\d{{2}}(?:(?:{sep}|[\-/.])+[A-Za-z0-9]{{1,4}}){{3,8}}"
+                r"[A-Za-z]{{2}}\d{{2}}(?:(?:{SEP_SPACE}|[\-/.])+[A-Za-z0-9]{{1,4}}){{3,8}}"
             ))
             .unwrap(),
             // Single hyphen after check digits, compact BBAN.
@@ -404,15 +396,29 @@ fn iban_glue_boundary_ok(text: &str, start: usize, end: usize) -> bool {
 /// next word (``…00 please`` → ``…00 plea``); walk the end left until the
 /// candidate is a full pattern match, boundary-ok, and checksum-valid.
 fn iban_glue_accept(text: &str, pattern: &Regex, start: usize, end: usize) -> Option<usize> {
+    longest_end(text, start, end, |e| {
+        let cand = &text[start..e];
+        iban_glue_boundary_ok(text, start, e)
+            && pattern
+                .find(cand)
+                .is_some_and(|m| m.start() == 0 && m.end() == cand.len())
+            && iban_valid(cand)
+    })
+}
+
+/// Largest char-boundary end in ``(start, end]`` that ``accept`` takes: the
+/// linear engine keeps the greedy match, so a failed Python lookahead is
+/// emulated by walking the end back.
+fn longest_end(
+    text: &str,
+    start: usize,
+    end: usize,
+    mut accept: impl FnMut(usize) -> bool,
+) -> Option<usize> {
     let mut try_end = end;
     while try_end > start {
-        if iban_glue_boundary_ok(text, start, try_end) {
-            let cand = &text[start..try_end];
-            if let Some(m) = pattern.find(cand) {
-                if m.start() == 0 && m.end() == cand.len() && iban_valid(cand) {
-                    return Some(try_end);
-                }
-            }
+        if accept(try_end) {
+            return Some(try_end);
         }
         try_end -= 1;
         while try_end > start && !text.is_char_boundary(try_end) {
@@ -517,8 +523,7 @@ fn credit_card_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
     RES.get_or_init(|| {
         // One or more whitespace / dash / punct separators between digit groups.
-        let sep_space = SEP_SPACE;
-        let sep = format!(r"(?:{sep_space}|[./\-\u{{2010}}-\u{{2015}}])+");
+        let sep = format!(r"(?:{SEP_SPACE}|[./\-\u{{2010}}-\u{{2015}}])+");
         vec![
             // 17–19 digit PANs (UnionPay, Maestro, Visa) group as 4-4-4-4-x.
             Regex::new(&format!(
@@ -902,7 +907,11 @@ fn location_valid(value: &str) -> bool {
 /// Spacing: the shared separator spaces plus line / page breaks, spelled out
 /// (not ``\s``) and with ASCII digits so every backend reads a pair alike.
 fn location_dms_pattern() -> String {
-    let sep = format!(r"(?:{SEP_SPACE}|[\f\v\x85\u{{2028}}\u{{2029}}])");
+    // One class: the shared spaces plus line / page breaks.
+    let sep = format!(
+        r"{}\f\v\x85\u{{2028}}\u{{2029}}]",
+        SEP_SPACE.strip_suffix(']').unwrap()
+    );
     let body = format!(
         r#"[0-9]{{1,3}}{sep}?[°º]{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?['′’](?:{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?(?:["″”]|''|′′))?"#
     );
@@ -930,18 +939,15 @@ fn location_dms_end(text: &str, start: usize, end: usize) -> usize {
     if !location_dms_left_ok(text, start) {
         return start;
     }
-    let mut try_end = end;
-    while try_end > start {
-        let cand = &text[start..try_end];
-        if location_dms_right_ok(text, try_end) && location_dms_full_re().is_match(cand) {
-            return if location_dms_valid(cand) { try_end } else { start };
-        }
-        try_end -= 1;
-        while try_end > start && !text.is_char_boundary(try_end) {
-            try_end -= 1;
-        }
+    // ``find_at`` already proved the greedy span is a whole match.
+    let found = longest_end(text, start, end, |e| {
+        location_dms_right_ok(text, e)
+            && (e == end || location_dms_full_re().is_match(&text[start..e]))
+    });
+    match found {
+        Some(e) if location_dms_valid(&text[start..e]) => e,
+        _ => start,
     }
-    start
 }
 
 /// ``(?<![A-Za-z0-9_.])`` before a DMS hit.
