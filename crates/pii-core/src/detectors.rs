@@ -867,17 +867,14 @@ fn scrub_imei(text: &str) -> (Option<String>, u32) {
     (current, count)
 }
 
-const LOCATION_PATTERN: &str =
-    r"[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[NnSs])?\s*,\s*[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[EeWw])?";
-
 fn location_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(LOCATION_PATTERN).unwrap())
-}
-
-fn location_full_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(&format!("^(?:{LOCATION_PATTERN})$")).unwrap())
+    RE.get_or_init(|| {
+        Regex::new(
+            r"[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[NnSs])?\s*,\s*[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[EeWw])?",
+        )
+        .unwrap()
+    })
 }
 
 fn location_boundary_ok(text: &str, start: usize, end: usize) -> bool {
@@ -1066,16 +1063,28 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
         let start = m.start();
         let mut end = m.end();
         if !accept(start, end) {
-            // Python's ``(?![A-Za-z\d.])`` backtracks the optional E/W letter
-            // (``4.9041 exactly``) or ``°`` (``4.904152°22``); the linear regex
-            // keeps them, so walk the end back to the longest whole match with
-            // a clean right edge, then validate it.
-            let shorter = longest_end(text, start, end, |e| {
-                e < end
-                    && location_boundary_ok(text, start, e)
-                    && location_full_re().is_match(&text[start..e])
-            })
-            .filter(|&e| location_valid(&text[start..e]));
+            // Python's ``(?![A-Za-z\d.])`` backtracks the optional tails in
+            // order: the ``\s*[EeWw]`` group (``4.9041 exactly``), then the
+            // ``°`` (``4.904152°22``); the linear regex keeps them. Only a
+            // failed right edge backtracks: the tails never change a number,
+            // so a validity reject stays a reject.
+            let shorter = if location_boundary_ok(text, start, end) {
+                None
+            } else {
+                let mut value = m.as_str();
+                let mut cuts = [None, None];
+                if let Some(v) = value.strip_suffix(['E', 'e', 'W', 'w']) {
+                    value = v.trim_end();
+                    cuts[0] = Some(start + value.len());
+                }
+                if let Some(v) = value.strip_suffix('°') {
+                    cuts[1] = Some(start + v.len());
+                }
+                cuts.into_iter()
+                    .flatten()
+                    .find(|&e| location_boundary_ok(text, start, e))
+                    .filter(|&e| location_valid(&text[start..e]))
+            };
             let Some(e) = shorter else {
                 pos = start + 1;
                 continue;
