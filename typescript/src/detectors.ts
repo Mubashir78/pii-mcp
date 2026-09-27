@@ -225,29 +225,21 @@ function emailShouldPeel(text: string, start: number, end: number): boolean {
 
 const EMAIL_DOMAIN_RUN_RE = /[\p{L}\p{N}.\-]*/uy;
 
+const EMAIL_LOCAL_CHAR_RE = /[\p{L}\p{N}_.%+\-]/u;
+const EMAIL_STICKY_RE = new RegExp(EMAIL_RE.source, "uy");
+
 /**
  * Leftmost ``EMAIL_RE`` match at or after ``pos``. Unicode letter classes make
- * every word of non-Latin prose a local-part candidate, so the regex runs only
- * on a window around each ``@``: 64 code points back (the local-part bound)
- * and forward over the domain run plus one char for ``(?!@)``. A match for one
- * ``@`` always starts before any match for the next (local parts exclude
- * ``@``), so taking the ``@``s in order keeps the whole-text result.
+ * every word of long prose a local-part candidate, so the regex is anchored
+ * per ``@`` instead of searched: a match for this ``@`` starts at the leftmost
+ * local-part char before it (64 code points at most, never past ``pos`` or an
+ * earlier ``@``), and whether it matches depends only on the domain after the
+ * ``@``. Taking the ``@``s in order keeps the whole-text search result, since
+ * a match for one ``@`` starts before any match for the next.
  */
-// One instance for window searches (reset per window), not a clone per call.
-const EMAIL_WINDOW_RE = cloneRegExp(EMAIL_RE);
-
 function findEmail(text: string, pos: number): [number, number] | null {
-  const re = EMAIL_WINDOW_RE;
   let dot = -1;
   for (let at = text.indexOf("@", pos); at !== -1; at = text.indexOf("@", at + 1)) {
-    let winStart = at;
-    for (let n = 0; n < 64 && winStart > pos; n += 1) {
-      winStart -= 1;
-      const unit = text.charCodeAt(winStart);
-      if (unit >= 0xdc00 && unit <= 0xdfff && winStart > pos) {
-        winStart -= 1;
-      }
-    }
     EMAIL_DOMAIN_RUN_RE.lastIndex = at + 1;
     EMAIL_DOMAIN_RUN_RE.exec(text);
     const runEnd = EMAIL_DOMAIN_RUN_RE.lastIndex;
@@ -262,11 +254,21 @@ function findEmail(text: string, pos: number): [number, number] | null {
     if (dot >= runEnd) {
       continue;
     }
-    const winEnd = Math.min(text.length, runEnd + 1);
-    re.lastIndex = 0;
-    const m = re.exec(text.slice(winStart, winEnd));
+    let start = at;
+    for (let n = 0; n < 64 && start > pos; n += 1) {
+      const prev = insideSurrogatePair(text, start - 1) ? start - 2 : start - 1;
+      if (prev < pos || !EMAIL_LOCAL_CHAR_RE.test(charAt(text, prev))) {
+        break;
+      }
+      start = prev;
+    }
+    if (start === at) {
+      continue;
+    }
+    EMAIL_STICKY_RE.lastIndex = start;
+    const m = EMAIL_STICKY_RE.exec(text);
     if (m !== null) {
-      return [winStart + m.index, winStart + m.index + m[0].length];
+      return [start, start + m[0].length];
     }
   }
   return null;
