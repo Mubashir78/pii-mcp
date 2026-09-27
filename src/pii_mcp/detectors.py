@@ -899,9 +899,9 @@ def _phone_international_end(text: str, start: int, _end: int) -> int:
     """End of the run of digit groups starting at ``start`` (``start``
     rejects).
 
-    The run is rescanned from ``start`` (64 chars of groups and separators,
-    whole groups only) so a group the regex span cut in half never counts. It
-    needs 8+ digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15
+    The run is rescanned from ``start`` to its end, so neither the regex span
+    nor a scan window can stop inside it and leave a group out. It needs 8+
+    digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15
     digits it holds more than one number (``… 1234567 (06) 12345678``,
     ``… 0958 - 020 7946 …``); no split point is reliable, and any tail left
     out could be a subscriber part, so the whole run is masked.
@@ -912,8 +912,7 @@ def _phone_international_end(text: str, start: int, _end: int) -> int:
         i = start + 2
     else:
         i = start + 1 if text[start] == "+" else start
-    limit = min(len(text), start + 64)
-    while i < limit:
+    while i < len(text):
         ch = text[i]
         if ch in _PHONE_INTERNATIONAL_SEPS:
             i += 1
@@ -924,10 +923,8 @@ def _phone_international_end(text: str, start: int, _end: int) -> int:
             i += 1
             continue
         run = i
-        while i < limit and text[i].isdecimal():
+        while i < len(text) and text[i].isdecimal():
             i += 1
-        if i < len(text) and text[i].isdecimal():
-            break  # the group runs past the window
         digits += i - run
         end = i
     return end if digits >= 8 else start

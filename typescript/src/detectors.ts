@@ -934,9 +934,9 @@ function isAsciiDigit(ch: string | undefined): boolean {
 /**
  * End of the run of digit groups starting at ``start`` (``start`` rejects).
  *
- * The run is rescanned from ``start`` (64 chars of groups and separators,
- * whole groups only) so a group the regex span cut in half never counts. It
- * needs 8+ digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15
+ * The run is rescanned from ``start`` to its end, so neither the regex span
+ * nor a scan window can stop inside it and leave a group out. It needs 8+
+ * digits, not counting a ``00`` prefix or a ``(0)`` trunk. Past 15
  * digits it holds more than one number (``… 1234567 (06) 12345678``,
  * ``… 0958 - 020 7946 …``); no split point is reliable, and any tail left out
  * could be a subscriber part, so the whole run is masked. Digits are ASCII,
@@ -948,8 +948,7 @@ function phoneInternationalEnd(text: string, start: number): number {
   let end = start;
   let digits = 0;
   let i = text.startsWith("00", start) ? start + 2 : text[start] === "+" ? start + 1 : start;
-  const limit = Math.min(text.length, start + 64);
-  while (i < limit) {
+  while (i < text.length) {
     if (isSep(i)) {
       i += 1;
       continue;
@@ -962,11 +961,8 @@ function phoneInternationalEnd(text: string, start: number): number {
       continue;
     }
     const run = i;
-    while (i < limit && isAsciiDigit(text[i])) {
+    while (isAsciiDigit(text[i])) {
       i += 1;
-    }
-    if (isAsciiDigit(text[i])) {
-      break; // the group runs past the window
     }
     digits += i - run;
     end = i;
