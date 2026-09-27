@@ -218,8 +218,11 @@ const EMAIL_DOMAIN_RUN_RE = /[\p{L}\p{N}.\-]*/uy;
  * ``@`` always starts before any match for the next (local parts exclude
  * ``@``), so taking the ``@``s in order keeps the whole-text result.
  */
+// One instance for window searches (reset per window), not a clone per call.
+const EMAIL_WINDOW_RE = cloneRegExp(EMAIL_RE);
+
 function findEmail(text: string, pos: number): [number, number] | null {
-  const re = cloneRegExp(EMAIL_RE);
+  const re = EMAIL_WINDOW_RE;
   let dot = -1;
   for (let at = text.indexOf("@", pos); at !== -1; at = text.indexOf("@", at + 1)) {
     let winStart = at;
@@ -922,12 +925,14 @@ const PHONE_SEP_EXTRA = GROUP_SPACES + GROUP_DASHES;
 // The span allows more than 15 digits so a ``(0)`` trunk between spaced groups
 // (``+44 (0) 20 7946 0958``) fits; ``phoneInternationalEnd`` re-measures the
 // run.
+// Separators the international pattern and its rescan both accept.
+const PHONE_INTERNATIONAL_SEPS = String.raw` .()\-${PHONE_SEP_EXTRA}`;
 const PHONE_INTERNATIONAL_RE = new RegExp(
-  String.raw`(?<![\w+])(?:\+|00)\d[\d .()\-${PHONE_SEP_EXTRA}]{6,20}\d`,
+  String.raw`(?<![\w+])(?:\+|00)\d[\d${PHONE_INTERNATIONAL_SEPS}]{6,20}\d`,
   "g",
 );
 
-const PHONE_INTERNATIONAL_SEP_RE = new RegExp(String.raw`[ .()\-${PHONE_SEP_EXTRA}]`);
+const PHONE_INTERNATIONAL_SEP_RE = new RegExp(`[${PHONE_INTERNATIONAL_SEPS}]`);
 
 function isAsciiDigit(ch: string | undefined): boolean {
   return ch !== undefined && ch >= "0" && ch <= "9";
