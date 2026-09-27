@@ -867,14 +867,17 @@ fn scrub_imei(text: &str) -> (Option<String>, u32) {
     (current, count)
 }
 
+const LOCATION_PATTERN: &str =
+    r"[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[NnSs])?\s*,\s*[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[EeWw])?";
+
 fn location_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r"[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[NnSs])?\s*,\s*[-+]?\d{1,3}\.\d{3,8}°?(?:\s*[EeWw])?",
-        )
-        .unwrap()
-    })
+    RE.get_or_init(|| Regex::new(LOCATION_PATTERN).unwrap())
+}
+
+fn location_full_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(&format!("^(?:{LOCATION_PATTERN})$")).unwrap())
 }
 
 fn location_boundary_ok(text: &str, start: usize, end: usize) -> bool {
@@ -1063,13 +1066,16 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
         let start = m.start();
         let mut end = m.end();
         if !accept(start, end) {
-            // Python backtracks the optional E/W letter (``4.9041 exactly``);
-            // the linear regex keeps it, so retry without it.
-            let shorter = m
-                .as_str()
-                .strip_suffix(['E', 'e', 'W', 'w'])
-                .map(|v| start + v.trim_end().len())
-                .filter(|&e| accept(start, e));
+            // Python's ``(?![A-Za-z\d.])`` backtracks the optional E/W letter
+            // (``4.9041 exactly``) or ``°`` (``4.904152°22``); the linear regex
+            // keeps them, so walk the end back to the longest whole match with
+            // a clean right edge, then validate it.
+            let shorter = longest_end(text, start, end, |e| {
+                e < end
+                    && location_boundary_ok(text, start, e)
+                    && location_full_re().is_match(&text[start..e])
+            })
+            .filter(|&e| location_valid(&text[start..e]));
             let Some(e) = shorter else {
                 pos = start + 1;
                 continue;
