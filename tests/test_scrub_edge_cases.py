@@ -766,6 +766,21 @@ class TestInternationalizedEmail:
         assert scrub_text(text)["text"] == "mail [EMAIL] ok"
         assert email_detector.scrub(text)[0] == "mail [EMAIL] ok"
 
+    def test_long_domain_with_glued_tld_is_masked_quickly(self) -> None:
+        # The shortening walk is capped; past the cap the match is masked as
+        # found. Runs on every backend (scrub_text) and the Python detector.
+        text = "a@" + "b." * 20000 + "c" * 30
+        for scrub in (lambda t: scrub_text(t)["text"], lambda t: email_detector.scrub(t)[0]):
+            start = time.perf_counter()
+            assert scrub(text) == "[EMAIL]" + "c" * 6
+            assert time.perf_counter() - start < 5
+
+    def test_retry_after_at_does_not_rewalk(self) -> None:
+        text = "a" * 64 + "@" + "b." * 4000 + "cc@"
+        start = time.perf_counter()
+        assert scrub_text(text)["text"] == text
+        assert time.perf_counter() - start < 5
+
     def test_second_address_starts_after_first(self) -> None:
         # The walk for the second ``@`` stops at the end of the first match.
         assert email_detector.scrub("a@x.com.b@y.com")[0] == "[EMAIL][EMAIL]"

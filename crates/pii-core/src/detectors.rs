@@ -286,6 +286,10 @@ fn email_end_ok(text: &str, end: usize) -> bool {
     email_next_pii(text, end)
 }
 
+/// How far back from a greedy email end to look for a clean shorter one
+/// (24-char TLD + 63-char label, with room); bounds the per-end full match.
+const EMAIL_SHORTEN_SPAN: usize = 128;
+
 fn email_should_peel(text: &str, start: usize, end: usize) -> bool {
     let mut try_end = end;
     while try_end > start {
@@ -314,9 +318,14 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
         let start = m.start();
         let mut end = m.end();
         if !email_end_ok(text, end) || email_should_peel(text, start, end) {
-            // Only ends before the greedy one: it already failed the checks.
-            let before_end = text[..end].char_indices().next_back().map_or(start, |(i, _)| i);
-            let shortened = longest_end(text, start, before_end, |e| {
+            // Only ends before the greedy one (it already failed the checks),
+            // and within ``EMAIL_SHORTEN_SPAN`` chars of it: a clean shorter
+            // end sits within a TLD and a label; past that, the fallback
+            // below masks the match as found.
+            let mut back = text[start..end].char_indices().rev().map(|(i, _)| start + i);
+            let before_end = back.next().unwrap_or(start);
+            let floor = back.nth(EMAIL_SHORTEN_SPAN - 2).unwrap_or(start);
+            let shortened = longest_end(text, floor, before_end, |e| {
                 is_full_email(&text[start..e]) && email_end_ok(text, e)
             });
             match shortened {

@@ -210,6 +210,10 @@ function isFullEmail(cand: string): boolean {
   return EMAIL_FULL_RE.test(cand);
 }
 
+// How far back from a greedy email end to look for a clean shorter one
+// (24-char TLD + 63-char label, with room); bounds the per-end full match.
+const EMAIL_SHORTEN_SPAN = 128;
+
 function emailShouldPeel(text: string, start: number, end: number): boolean {
   for (let tryEnd = end - 1; tryEnd > start; tryEnd -= 1) {
     if (insideSurrogatePair(text, tryEnd)) {
@@ -287,10 +291,14 @@ function scrubEmail(text: string): { text: string; count: number } {
     let end = found[1];
     if (!emailEndOk(text, end) || emailShouldPeel(text, start, end)) {
       let shortened: number | null = null;
-      for (let tryEnd = end - 1; tryEnd > start; tryEnd -= 1) {
+      // A clean shorter end sits within a TLD and a label of the greedy one;
+      // past EMAIL_SHORTEN_SPAN code points the fallback masks it as found.
+      let span = 1;
+      for (let tryEnd = end - 1; tryEnd > start && span < EMAIL_SHORTEN_SPAN; tryEnd -= 1) {
         if (insideSurrogatePair(text, tryEnd)) {
           continue;
         }
+        span += 1;
         if (isFullEmail(text.slice(start, tryEnd)) && emailEndOk(text, tryEnd)) {
           shortened = tryEnd;
           break;
