@@ -277,10 +277,14 @@ mod tests {
         assert_eq!(r.text, "[LOCATION]°Ex");
         let r = scrub_text("52.3676, 4.904152°22", None, true).unwrap();
         assert_eq!(r.text, "[LOCATION]°22");
-        // Only two cuts: a long space run before the tail stays linear.
-        let text = format!("52.3676, 4.9041{}Ex", " ".repeat(20000));
+        // Only two cuts: a long space run before the tail stays linear
+        // (400k spaces: milliseconds, where a full walk-back takes minutes).
+        let spaces = " ".repeat(400_000);
+        let text = format!("52.3676, 4.9041{spaces}Ex");
+        let started = std::time::Instant::now();
         let r = scrub_text(&text, None, true).unwrap();
-        assert_eq!(r.text, format!("[LOCATION]{}Ex", " ".repeat(20000)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        assert_eq!(r.text, format!("[LOCATION]{spaces}Ex"));
     }
 
     #[test]
