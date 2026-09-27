@@ -829,6 +829,11 @@ class TestDashGroupedMac:
         assert result["text"] == "mac [MAC] up"
         assert result["counts"]["mac"] == 1
 
+    def test_sentence_end_period(self) -> None:
+        assert scrub_text("Device MAC is 00e0-fc12-3456.")["text"] == "Device MAC is [MAC]."
+        # A dotted token continuing past the MAC is not a MAC.
+        assert scrub_text("v 00e0-fc12-3456.bin")["counts"]["mac"] == 0
+
     def test_mixed_case_masked(self) -> None:
         # A hand-typed MAC may mix cases; recall over the rare all-hex key.
         assert scrub_text("mac 00E0-fc12-3456 up")["text"] == "mac [MAC] up"

@@ -573,7 +573,8 @@ const MAC_RES = [
 ] as const;
 
 // Huawei / H3C ``aabb-ccdd-eeff``; ``macDashValid`` needs a hex letter.
-const MAC_DASH_RE = /(?<![\w.-])(?:[0-9A-Fa-f]{4}-){2}[0-9A-Fa-f]{4}(?![\w.-])/g;
+// A ``.`` may follow (sentence end) unless it continues a dotted token.
+const MAC_DASH_RE = /(?<![\w.-])(?:[0-9A-Fa-f]{4}-){2}[0-9A-Fa-f]{4}(?![\w-])(?!\.\w)/g;
 
 /** A 4-4-4 dash run of digits only is a part / order number, not a MAC. */
 function macDashValid(value: string): boolean {

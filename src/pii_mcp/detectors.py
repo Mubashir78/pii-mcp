@@ -507,9 +507,11 @@ MAC_RES: tuple[re.Pattern[str], ...] = (
         r"(?<![\w.])(?:[0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}(?![\w.])"
     ),
     # Huawei / H3C ``aabb-ccdd-eeff``; ``_mac_dash_valid`` needs a hex letter.
-    # ASCII word boundaries, as in the Rust / JS backends.
+    # ASCII word boundaries, as in the Rust / JS backends; a ``.`` may follow
+    # (sentence end) unless it continues a dotted token.
     re.compile(
-        r"(?<![A-Za-z0-9_.-])(?:[0-9A-Fa-f]{4}-){2}[0-9A-Fa-f]{4}(?![A-Za-z0-9_.-])"
+        r"(?<![A-Za-z0-9_.-])(?:[0-9A-Fa-f]{4}-){2}[0-9A-Fa-f]{4}"
+        r"(?![A-Za-z0-9_-])(?!\.[A-Za-z0-9_])"
     ),
 )
 

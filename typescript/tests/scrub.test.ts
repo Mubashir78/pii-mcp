@@ -486,6 +486,8 @@ describe("scrubText", () => {
       expect(result.counts.mac).toBe(1);
     }
     expect(scrubText("mac 00E0-fc12-3456 up").text).toBe("mac [MAC] up");
+    expect(scrubText("Device MAC is 00e0-fc12-3456.").text).toBe("Device MAC is [MAC].");
+    expect(scrubText("v 00e0-fc12-3456.bin").counts.mac).toBe(0);
     expect(scrubText("mac:ж00e0-fc12-3456").text).toBe("mac:ж[MAC]");
     for (const text of [
       "part 1234-5678-9012 shipped",
