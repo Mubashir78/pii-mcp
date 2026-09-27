@@ -1,3 +1,45 @@
+## [1.6.0](https://github.com/foro-sh/pii-mcp/compare/v1.5.5...v1.6.0) (2026-09-27)
+
+### Features
+
+* **detectors:** catch more PII formats ([#31](https://github.com/foro-sh/pii-mcp/issues/31)) ([91b1396](https://github.com/foro-sh/pii-mcp/commit/91b1396e3178e5edd342885993c1f9784ca0b04e))
+* **detectors:** match dash-grouped mac addresses ([1db108f](https://github.com/foro-sh/pii-mcp/commit/1db108f2cc840c9fafa0a814cfe31b1c749cd70c))
+* **detectors:** match degrees-minutes-seconds coordinates ([e620c26](https://github.com/foro-sh/pii-mcp/commit/e620c26d2be64be9649df07608136d5e7188e817))
+* **detectors:** match grouped german tax ids ([3d9d9c1](https://github.com/foro-sh/pii-mcp/commit/3d9d9c17c3f4ed1705dd6700e87ae35c823642f7))
+* **detectors:** match internationalized email addresses ([dcf30ba](https://github.com/foro-sh/pii-mcp/commit/dcf30ba50b7e65bb72d90b1d0bdd89e87560f619))
+
+### Bug Fixes
+
+* **detectors:** accept unicode separators in bsn and ssn groups ([60ff7e7](https://github.com/foro-sh/pii-mcp/commit/60ff7e7e81837d749813a6f64e7ce8c6105bb831))
+* **detectors:** allow line breaks and thin spaces in dms pairs ([5a5eb63](https://github.com/foro-sh/pii-mcp/commit/5a5eb631b1fa5ef2343c69f6f2ffc71ff80a3eae))
+* **detectors:** cover more unspaced scripts after an email ([6f5494a](https://github.com/foro-sh/pii-mcp/commit/6f5494afe1c239027ac8982689b62bb68f26c733))
+* **detectors:** keep 0-led subscriber groups in international phones ([f89fc62](https://github.com/foro-sh/pii-mcp/commit/f89fc620644b55ec977cca8aace5a7cd10d80597))
+* **detectors:** keep emails in unspaced-script prose masked ([391d88e](https://github.com/foro-sh/pii-mcp/commit/391d88e3fd24d48b8cd912c66681f150182791d1))
+* **detectors:** mask a dash-grouped mac before a sentence period ([af0e49f](https://github.com/foro-sh/pii-mcp/commit/af0e49fcab4c1517888faf5056d8bab04c041b29))
+* **detectors:** mask a phone run past 15 digits whole ([4f75076](https://github.com/foro-sh/pii-mcp/commit/4f75076b7c628bc318573d412f783fd0194ac690))
+* **detectors:** mask an email when no clean end is found ([da4d5d6](https://github.com/foro-sh/pii-mcp/commit/da4d5d6df39a83d687dbd9a342a8df837c9cdc79))
+* **detectors:** mask mixed-script email local parts whole ([d93c679](https://github.com/foro-sh/pii-mcp/commit/d93c679c50626b8ccb6fecdfb099ad960543a574))
+* **detectors:** mask phones with unicode separators and a (0) trunk ([c5308ae](https://github.com/foro-sh/pii-mcp/commit/c5308aeccf25891e04bef41c12024377d2a9f450))
+* **detectors:** match dms pairs alike in every backend ([401df5f](https://github.com/foro-sh/pii-mcp/commit/401df5f220ad80b1f633bf56a18232c435da74f6))
+* **detectors:** match python's tld chars in rust and js ([f5b82bf](https://github.com/foro-sh/pii-mcp/commit/f5b82bfe2a076cb7f32c75512a6d2ae1b06795b4))
+* **detectors:** read dms coordinates with ascii digits only ([936ca43](https://github.com/foro-sh/pii-mcp/commit/936ca438b451f8dfbeeffea58d9ef860f19b34c9))
+* **detectors:** scan a phone run to its end, not a 64-char window ([8c96271](https://github.com/foro-sh/pii-mcp/commit/8c9627174c78fcba663dc268d4dc8c3a14cd53a1))
+* **detectors:** split back-to-back international phones at groups ([2a68c9f](https://github.com/foro-sh/pii-mcp/commit/2a68c9f2683fc3fc613518ded6bdb498cd18d4c4))
+* **detectors:** walk email ends by whole letters in rust and js ([4ac3645](https://github.com/foro-sh/pii-mcp/commit/4ac3645583bafe19596813435d1cfc2e87b9d979))
+* **python:** use ascii word boundaries for dash-grouped macs ([4851d1f](https://github.com/foro-sh/pii-mcp/commit/4851d1f8c0687c11c6b6020cee47b746473f2555))
+* **rust:** backtrack any optional tail of a decimal location ([4f9314e](https://github.com/foro-sh/pii-mcp/commit/4f9314eef8f3546087605eee3bd10700e0d7ae71))
+* **rust:** emulate python's (?!@) inside the email regex ([b9638af](https://github.com/foro-sh/pii-mcp/commit/b9638aff42435edb66c983a853e527c0e2a6cbfc))
+* **rust:** keep public id validators to their separator rules ([63bb4c6](https://github.com/foro-sh/pii-mcp/commit/63bb4c6f8d19dd27913c900d280b78610aa46c3a))
+
+### Performance Improvements
+
+* **detectors:** anchor the email match at each local-part start ([4f02b16](https://github.com/foro-sh/pii-mcp/commit/4f02b160b3bb9b03eba3e44b1827d865130d6c1b))
+* **detectors:** cap the email shortening walk at 128 chars ([640b95f](https://github.com/foro-sh/pii-mcp/commit/640b95f1a48b41d5962c37b4a876dd3899a4c64d))
+* **rust:** backtrack a decimal location by its two optional tails ([177c463](https://github.com/foro-sh/pii-mcp/commit/177c4632530b9b71ccc68d9e28677d7bec44101a))
+* **rust:** read the email span without captures on most hits ([7692e50](https://github.com/foro-sh/pii-mcp/commit/7692e504c7e616b771214e20bfbf9bd77a726d1a))
+* **rust:** stop re-walking an email that ends before an "@" ([3594c24](https://github.com/foro-sh/pii-mcp/commit/3594c24617390809f11f96bef7348f6c7fc86b35))
+* **rust:** validate tax ids without allocating ([3d72759](https://github.com/foro-sh/pii-mcp/commit/3d72759c32291215e892845fae27edd8d448847f))
+
 ## [1.5.5](https://github.com/foro-sh/pii-mcp/compare/v1.5.4...v1.5.5) (2026-09-23)
 
 ### Bug Fixes
