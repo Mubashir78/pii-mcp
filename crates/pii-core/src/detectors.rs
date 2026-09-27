@@ -4,8 +4,8 @@
 //! explicit boundary checks so matching stays on the linear-time `regex` crate.
 
 use crate::checksum::{
-    bsn_valid, iban_valid, imei_valid, is_group_sep, luhn_valid, nl_passport_valid,
-    nl_postcode_valid, ssn_valid, tax_id_valid, GROUP_DASHES, GROUP_SPACES,
+    bsn_valid_grouped, iban_valid, imei_valid, is_group_sep, luhn_valid, nl_passport_valid,
+    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, GROUP_DASHES, GROUP_SPACES,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -1243,11 +1243,12 @@ fn scrub_bsn(text: &str) -> (Option<String>, u32) {
         text,
         &res[0],
         "[BSN]",
-        |v, s, _| not_decimal_fraction(text, s) && bsn_valid(v),
+        |v, s, _| not_decimal_fraction(text, s) && bsn_valid_grouped(v),
         false,
     );
     let src = first.as_deref().unwrap_or(text);
-    let (second, n) = replace_matches(src, &res[1], "[BSN]", |v, _, _| bsn_valid(v), false);
+    let (second, n) =
+        replace_matches(src, &res[1], "[BSN]", |v, _, _| bsn_valid_grouped(v), false);
     count += n;
     (second.or(first), count)
 }
@@ -1272,13 +1273,13 @@ fn ssn_res() -> &'static [Regex] {
 fn scrub_ssn(text: &str) -> (Option<String>, u32) {
     let res = ssn_res();
     let (grouped, mut count) =
-        scrub_patterns(text, &res[..3], "[SSN]", |v, _, _| ssn_valid(v), false);
+        scrub_patterns(text, &res[..3], "[SSN]", |v, _, _| ssn_valid_grouped(v), false);
     let src = grouped.as_deref().unwrap_or(text);
     let (compact, n) = replace_matches(
         src,
         &res[3],
         "[SSN]",
-        |v, s, _| not_decimal_fraction(src, s) && ssn_valid(v),
+        |v, s, _| not_decimal_fraction(src, s) && ssn_valid_grouped(v),
         false,
     );
     count += n;
@@ -1306,7 +1307,7 @@ fn scrub_tax_id(text: &str) -> (Option<String>, u32) {
         text,
         tax_id_res(),
         "[TAX_ID]",
-        |v, _, _| tax_id_valid(v),
+        |v, _, _| tax_id_valid_grouped(v),
         false,
     )
 }
