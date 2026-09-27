@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { emailDetector } from "../src/detectors.js";
 import { resetNativeCache } from "../src/native.js";
 import {
   PiiScrubError,
@@ -397,6 +398,25 @@ describe("scrubText", () => {
       "[EMAIL][IBAN]",
     );
     expect(scrubText("x@y.c0m").text).toBe("x@y.c0m");
+    expect(scrubText("x".repeat(70) + "@example.com").text).toBe("x".repeat(6) + "[EMAIL]");
+    expect(scrubText("mail \u{1d49c}bc@example.com ok").text).toBe("mail [EMAIL] ok");
+    // The JS detector itself (scrubText may route to native): per-"@" walk.
+    expect(emailDetector.scrub("x".repeat(70) + "@example.com").text).toBe(
+      "x".repeat(6) + "[EMAIL]",
+    );
+    expect(emailDetector.scrub("mail \u{1d49c}bc@example.com ok").text).toBe(
+      "mail [EMAIL] ok",
+    );
+    expect(emailDetector.scrub("a@x.com.b@y.com").text).toBe("[EMAIL][EMAIL]");
+    for (const text of [
+      ("\u7530\u4e2d".repeat(40) + "@a.b").repeat(5000),
+      "a.b@".repeat(20000),
+      "a@".repeat(100000),
+    ]) {
+      const start = performance.now();
+      emailDetector.scrub(text);
+      expect(performance.now() - start).toBeLessThan(5000);
+    }
     expect(scrubText("x@y.\u216b\u216b x").text).toBe("[EMAIL] x");
     expect(scrubText("ada@example.de\u00bd x").text).toBe("[EMAIL] x");
     // Astral TLD chars: the end walk never splits a surrogate pair.

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from pii_mcp import scrub_text
+from pii_mcp.detectors import email_detector
 
 
 class TestIbanSeparatorGaps:
@@ -728,6 +731,33 @@ class TestInternationalizedEmail:
         # ``Ⅻ`` is a TLD char but not a letter, so it is not the start of the
         # next address (Python ``isalpha``; Rust must not use is_alphabetic).
         assert scrub_text("ada@example.com\u216b1@b")["text"] == "[EMAIL]1@b"
+
+    # The pure-Python email detector is called directly: ``scrub_text`` may
+    # route to the native backend, which does not use the per-``@`` walk.
+
+    def test_local_part_longer_than_64_keeps_last_64(self) -> None:
+        # The anchored start is clamped to 64 chars before the ``@``.
+        for out in (scrub_text("x" * 70 + "@example.com")["text"],
+                    email_detector.scrub("x" * 70 + "@example.com")[0]):
+            assert out == "x" * 6 + "[EMAIL]"
+
+    def test_astral_local_part(self) -> None:
+        text = "mail \U0001d49cbc@example.com ok"
+        assert scrub_text(text)["text"] == "mail [EMAIL] ok"
+        assert email_detector.scrub(text)[0] == "mail [EMAIL] ok"
+
+    def test_second_address_starts_after_first(self) -> None:
+        # The walk for the second ``@`` stops at the end of the first match.
+        assert email_detector.scrub("a@x.com.b@y.com")[0] == "[EMAIL][EMAIL]"
+
+    @pytest.mark.parametrize(
+        "text",
+        [("\u7530\u4e2d" * 40 + "@a.b") * 5000, "a.b@" * 20000, "a@" * 100000],
+    )
+    def test_many_at_signs_scrub_in_linear_time(self, text: str) -> None:
+        start = time.perf_counter()
+        email_detector.scrub(text)
+        assert time.perf_counter() - start < 5
 
     def test_digit_tld_still_rejected(self) -> None:
         assert scrub_text("x@y.c0m")["text"] == "x@y.c0m"
