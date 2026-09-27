@@ -707,6 +707,16 @@ class TestInternationalizedEmail:
         assert result["text"].startswith("mail [EMAIL]")
         assert "@" not in result["text"]
 
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [("x@y.\u216b\u216b x", "[EMAIL] x"), ("ada@example.de\u00bd x", "[EMAIL] x")],
+    )
+    def test_numeric_letters_in_tld_same_on_every_backend(
+        self, text: str, expected: str
+    ) -> None:
+        # Python's ``[^\W\d_]`` takes letter-like numerics; Rust / JS match it.
+        assert scrub_text(text)["text"] == expected
+
     def test_digit_tld_still_rejected(self) -> None:
         assert scrub_text("x@y.c0m")["text"] == "x@y.c0m"
 

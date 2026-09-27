@@ -159,7 +159,9 @@ function replaceMatches(
 const UNSPACED_SCRIPTS = String.raw`\u0e00-\u0eff\u0f00-\u0fff\u1000-\u109f\u1100-\u11ff\u1780-\u17ff\u3000-\u31ff\u3400-\u4dbf\u4e00-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\uff00-\uffef\u{20000}-\u{3ffff}`;
 const UNSPACED_CHAR_RE = new RegExp(`[${UNSPACED_SCRIPTS}]`, "u");
 const EMAIL_LOCAL = String.raw`[\p{L}\p{N}_.%+\-]{1,64}`;
-const EMAIL_TLD = String.raw`(?:(?:(?![${UNSPACED_SCRIPTS}])\p{L}){2,24}|(?:(?=[${UNSPACED_SCRIPTS}])\p{L}){2,24})`;
+// TLD chars are Python's ``[^\W\d_]``: letters plus letter-like / other
+// numerics (``Ⅻ``, ``²``), so every backend masks the same span.
+const EMAIL_TLD = String.raw`(?:(?:(?![${UNSPACED_SCRIPTS}])[\p{L}\p{Nl}\p{No}]){2,24}|(?:(?=[${UNSPACED_SCRIPTS}])[\p{L}\p{Nl}\p{No}]){2,24})`;
 
 // Letters and digits are Unicode (EAI / IDN: ``josé@example.com``,
 // ``ada@münchen.de``), matching Python's ``\w`` / ``[^\W_]``.
