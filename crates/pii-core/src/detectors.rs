@@ -161,46 +161,68 @@ where
 /// script or free of it, and one such letter after the TLD ends the address.
 /// The local part may mix scripts (``田中123@``): glued prose before it is
 /// over-masked rather than a name part leaked.
-const UNSPACED_SCRIPTS: &str = r"[\u{0e00}-\u{0eff}\u{0f00}-\u{0fff}\u{1000}-\u{109f}\u{1100}-\u{11ff}\u{1780}-\u{17ff}\u{3000}-\u{31ff}\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}\u{a960}-\u{a97f}\u{ac00}-\u{d7ff}\u{f900}-\u{faff}\u{ff00}-\u{ffef}\u{20000}-\u{3ffff}]";
+const UNSPACED_RANGES: [(char, char); 13] = [
+    ('\u{0e00}', '\u{0eff}'),
+    ('\u{0f00}', '\u{0fff}'),
+    ('\u{1000}', '\u{109f}'),
+    ('\u{1100}', '\u{11ff}'),
+    ('\u{1780}', '\u{17ff}'),
+    ('\u{3000}', '\u{31ff}'),
+    ('\u{3400}', '\u{4dbf}'),
+    ('\u{4e00}', '\u{9fff}'),
+    ('\u{a960}', '\u{a97f}'),
+    ('\u{ac00}', '\u{d7ff}'),
+    ('\u{f900}', '\u{faff}'),
+    ('\u{ff00}', '\u{ffef}'),
+    ('\u{20000}', '\u{3ffff}'),
+];
 /// Email local part (1–64 chars): Unicode letters / digits plus ``_.%+-``.
 const EMAIL_LOCAL: &str = r"[\p{L}\p{N}_.%+\-]{1,64}";
 
 fn is_unspaced_script(c: char) -> bool {
-    matches!(
-        c,
-        '\u{0e00}'..='\u{0eff}'
-            | '\u{0f00}'..='\u{0fff}'
-            | '\u{1000}'..='\u{109f}'
-            | '\u{1100}'..='\u{11ff}'
-            | '\u{1780}'..='\u{17ff}'
-            | '\u{3000}'..='\u{31ff}'
-            | '\u{3400}'..='\u{4dbf}'
-            | '\u{4e00}'..='\u{9fff}'
-            | '\u{a960}'..='\u{a97f}'
-            | '\u{ac00}'..='\u{d7ff}'
-            | '\u{f900}'..='\u{faff}'
-            | '\u{ff00}'..='\u{ffef}'
-            | '\u{20000}'..='\u{3ffff}'
+    UNSPACED_RANGES.iter().any(|&(lo, hi)| (lo..=hi).contains(&c))
+}
+
+/// ``UNSPACED_RANGES`` as a regex class, so the TLD split and
+/// ``is_unspaced_script`` read one list.
+fn unspaced_class() -> String {
+    let ranges: String = UNSPACED_RANGES
+        .iter()
+        .map(|&(lo, hi)| format!(r"\u{{{:x}}}-\u{{{:x}}}", u32::from(lo), u32::from(hi)))
+        .collect();
+    format!("[{ranges}]")
+}
+
+/// Letters and digits are Unicode (EAI / IDN: ``josé@example.com``,
+/// ``ada@münchen.de``), matching Python's ``\w`` / ``[^\W_]``, except that a
+/// TLD may not mix unspaced scripts with others. TLD chars are ``[^\W\d_]``
+/// as in Python: letters plus letter-like / other numerics (``Ⅻ``, ``²``).
+fn email_pattern() -> String {
+    let unspaced = unspaced_class();
+    format!(
+        r"{EMAIL_LOCAL}@[\p{{L}}\p{{N}}-]{{1,63}}(?:\.[\p{{L}}\p{{N}}-]{{1,63}})*\.(?:[[\p{{L}}\p{{Nl}}\p{{No}}]--{unspaced}]{{2,24}}|[[\p{{L}}\p{{Nl}}\p{{No}}]&&{unspaced}]{{2,24}})"
     )
+}
+
+/// Bounded Unicode classes need a larger lazy-DFA cache than the 2 MiB
+/// default, or big inputs fall back to the ~30x slower NFA engine.
+fn build_email_regex(pattern: &str) -> Regex {
+    regex::RegexBuilder::new(pattern)
+        .dfa_size_limit(16 << 20)
+        .build()
+        .unwrap()
+}
+
+/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``).
+fn is_full_email(cand: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| build_email_regex(&format!("^(?:{})$", email_pattern())))
+        .is_match(cand)
 }
 
 fn email_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        // Letters and digits are Unicode (EAI / IDN: ``josé@example.com``,
-        // ``ada@münchen.de``), matching Python's ``\w`` / ``[^\W_]``, except
-        // that a TLD may not mix unspaced scripts with others (see
-        // ``UNSPACED_SCRIPTS``). TLD chars are ``[^\W\d_]`` as in Python:
-        // letters plus letter-like / other numerics (``Ⅻ``, ``²``). Bounded Unicode classes need a larger
-        // lazy-DFA cache than the 2 MiB default, or big inputs fall back to
-        // the ~30x slower NFA engine.
-        regex::RegexBuilder::new(&format!(
-            r"{EMAIL_LOCAL}@[\p{{L}}\p{{N}}-]{{1,63}}(?:\.[\p{{L}}\p{{N}}-]{{1,63}})*\.(?:[[\p{{L}}\p{{Nl}}\p{{No}}]--{UNSPACED_SCRIPTS}]{{2,24}}|[[\p{{L}}\p{{Nl}}\p{{No}}]&&{UNSPACED_SCRIPTS}]{{2,24}})"
-        ))
-        .dfa_size_limit(16 << 20)
-        .build()
-        .unwrap()
-    })
+    RE.get_or_init(|| build_email_regex(&email_pattern()))
 }
 
 /// Python/JS shorten when ``(?!@)`` is not enough — TLD may also absorb a
@@ -230,15 +252,18 @@ fn email_next_pii(text: &str, end: usize) -> bool {
     (8..=9).contains(&n)
 }
 
+/// ``c`` is in the regex ``class`` (compiled once into ``re``); std has no
+/// Unicode general-category predicates matching Python's.
+fn char_in_class(re: &'static OnceLock<Regex>, class: &str, c: char) -> bool {
+    re.get_or_init(|| Regex::new(&format!("^{class}$")).unwrap())
+        .is_match(c.encode_utf8(&mut [0u8; 4]))
+}
+
 /// ``\p{L}`` (Python ``str.isalpha``): ``char::is_alphabetic`` also takes
 /// letter numbers (``Ⅻ``) and some combining marks.
 fn is_letter(c: char) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    c.is_ascii_alphabetic()
-        || (!c.is_ascii()
-            && RE
-                .get_or_init(|| Regex::new(r"^\p{L}$").unwrap())
-                .is_match(c.encode_utf8(&mut [0u8; 4])))
+    c.is_ascii_alphabetic() || (!c.is_ascii() && char_in_class(&RE, r"\p{L}", c))
 }
 
 /// ``[\p{L}\p{N}]`` (Python ``str.isalnum``).
@@ -261,7 +286,6 @@ fn email_end_ok(text: &str, end: usize) -> bool {
 }
 
 fn email_should_peel(text: &str, start: usize, end: usize) -> bool {
-    let pattern = email_re();
     let mut try_end = end;
     while try_end > start {
         try_end -= 1;
@@ -272,11 +296,8 @@ fn email_should_peel(text: &str, start: usize, end: usize) -> bool {
         if !is_letter(ch) {
             break;
         }
-        let cand = &text[start..try_end];
-        if let Some(mm) = pattern.find(cand) {
-            if mm.start() == 0 && mm.end() == cand.len() && email_next_pii(text, try_end) {
-                return true;
-            }
+        if email_next_pii(text, try_end) && is_full_email(&text[start..try_end]) {
+            return true;
         }
     }
     false
@@ -297,13 +318,9 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
                 if !text.is_char_boundary(try_end) {
                     continue;
                 }
-                let cand = &text[start..try_end];
-                if let Some(mm) = pattern.find(cand) {
-                    if mm.start() == 0 && mm.end() == cand.len() && email_end_ok(text, try_end)
-                    {
-                        shortened = Some(try_end);
-                        break;
-                    }
+                if is_full_email(&text[start..try_end]) && email_end_ok(text, try_end) {
+                    shortened = Some(try_end);
+                    break;
                 }
             }
             match shortened {
@@ -1387,12 +1404,7 @@ fn is_phone_international_sep(c: char) -> bool {
 /// runs for non-ASCII numerics, so separators never reach it.
 fn is_decimal(c: char) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    c.is_ascii_digit()
-        || (!c.is_ascii()
-            && c.is_numeric()
-            && RE
-                .get_or_init(|| Regex::new(r"^\d$").unwrap())
-                .is_match(c.encode_utf8(&mut [0u8; 4])))
+    c.is_ascii_digit() || (!c.is_ascii() && c.is_numeric() && char_in_class(&RE, r"\d", c))
 }
 
 /// End of the run of digit groups starting at ``start`` (``start`` rejects).
