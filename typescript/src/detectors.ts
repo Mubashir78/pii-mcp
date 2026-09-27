@@ -175,11 +175,23 @@ const EMAIL_NEXT_PII_RE = new RegExp(
   "u",
 );
 
+/** True when ``i`` falls between the two halves of a surrogate pair. */
+function insideSurrogatePair(text: string, i: number): boolean {
+  const unit = text.charCodeAt(i);
+  const prev = text.charCodeAt(i - 1);
+  return unit >= 0xdc00 && unit <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff;
+}
+
+/** The whole character at ``i`` (both halves of an astral one). */
+function charAt(text: string, i: number): string {
+  return String.fromCodePoint(text.codePointAt(i)!);
+}
+
 function emailEndOk(text: string, end: number): boolean {
   if (end >= text.length) {
     return true;
   }
-  const ch = text[end]!;
+  const ch = charAt(text, end);
   if (ch === "@") {
     return false;
   }
@@ -191,7 +203,10 @@ function emailEndOk(text: string, end: number): boolean {
 
 function emailShouldPeel(text: string, start: number, end: number): boolean {
   for (let tryEnd = end - 1; tryEnd > start; tryEnd -= 1) {
-    if (!/\p{L}/u.test(text[tryEnd]!)) {
+    if (insideSurrogatePair(text, tryEnd)) {
+      continue;
+    }
+    if (!/\p{L}/u.test(charAt(text, tryEnd))) {
       break;
     }
     const cand = text.slice(start, tryEnd);
@@ -269,6 +284,9 @@ function scrubEmail(text: string): { text: string; count: number } {
     if (!emailEndOk(text, end) || emailShouldPeel(text, start, end)) {
       let shortened: number | null = null;
       for (let tryEnd = end - 1; tryEnd > start; tryEnd -= 1) {
+        if (insideSurrogatePair(text, tryEnd)) {
+          continue;
+        }
         const cand = text.slice(start, tryEnd);
         const full = cloneRegExp(EMAIL_RE);
         full.lastIndex = 0;

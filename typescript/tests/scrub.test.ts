@@ -393,6 +393,12 @@ describe("scrubText", () => {
     expect(scrubText("x@y.c0m").text).toBe("x@y.c0m");
     expect(scrubText("x@y.\u216b\u216b x").text).toBe("[EMAIL] x");
     expect(scrubText("ada@example.de\u00bd x").text).toBe("[EMAIL] x");
+    // Astral TLD chars: the end walk never splits a surrogate pair.
+    expect(scrubText("ada@x.de\u{10107}abc9").text).toBe("[EMAIL]9");
+    expect(scrubText("mail ada@example.\u{1d41c}\u{1d428}\u{1d426}2024 x").text).toBe(
+      "mail [EMAIL]2024 x",
+    );
+    expect(scrubText("ada@example.com\u216b1@b").text).toBe("[EMAIL]1@b");
     // Letters glued after the TLD: masked as found instead of dropped.
     for (const glue of ["a".repeat(30), "\ua188".repeat(30), "\ua98f".repeat(30)]) {
       const text = scrubText(`mail ada@example.com${glue}`).text;

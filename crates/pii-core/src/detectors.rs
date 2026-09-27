@@ -230,6 +230,22 @@ fn email_next_pii(text: &str, end: usize) -> bool {
     (8..=9).contains(&n)
 }
 
+/// ``\p{L}`` (Python ``str.isalpha``): ``char::is_alphabetic`` also takes
+/// letter numbers (``Ⅻ``) and some combining marks.
+fn is_letter(c: char) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    c.is_ascii_alphabetic()
+        || (!c.is_ascii()
+            && RE
+                .get_or_init(|| Regex::new(r"^\p{L}$").unwrap())
+                .is_match(c.encode_utf8(&mut [0u8; 4])))
+}
+
+/// ``[\p{L}\p{N}]`` (Python ``str.isalnum``).
+fn is_letter_or_number(c: char) -> bool {
+    is_letter(c) || c.is_numeric()
+}
+
 fn email_end_ok(text: &str, end: usize) -> bool {
     if end >= text.len() {
         return true;
@@ -238,7 +254,7 @@ fn email_end_ok(text: &str, end: usize) -> bool {
     if next == '@' {
         return false;
     }
-    if !next.is_alphanumeric() || is_unspaced_script(next) {
+    if !is_letter_or_number(next) || is_unspaced_script(next) {
         return true;
     }
     email_next_pii(text, end)
@@ -253,7 +269,7 @@ fn email_should_peel(text: &str, start: usize, end: usize) -> bool {
             try_end -= 1;
         }
         let ch = text[try_end..].chars().next().unwrap();
-        if !ch.is_alphabetic() {
+        if !is_letter(ch) {
             break;
         }
         let cand = &text[start..try_end];

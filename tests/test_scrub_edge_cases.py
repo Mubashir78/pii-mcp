@@ -717,6 +717,11 @@ class TestInternationalizedEmail:
         # Python's ``[^\W\d_]`` takes letter-like numerics; Rust / JS match it.
         assert scrub_text(text)["text"] == expected
 
+    def test_letter_number_after_tld_is_not_peeled(self) -> None:
+        # ``Ⅻ`` is a TLD char but not a letter, so it is not the start of the
+        # next address (Python ``isalpha``; Rust must not use is_alphabetic).
+        assert scrub_text("ada@example.com\u216b1@b")["text"] == "[EMAIL]1@b"
+
     def test_digit_tld_still_rejected(self) -> None:
         assert scrub_text("x@y.c0m")["text"] == "x@y.c0m"
 
