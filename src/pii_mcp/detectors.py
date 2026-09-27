@@ -161,7 +161,8 @@ _UNSPACED_SCRIPTS = (
 )
 _UNSPACED_CHAR_RE = re.compile(f"[{_UNSPACED_SCRIPTS}]")
 _EMAIL_ALNUM = r"[^\W_]"
-_EMAIL_LOCAL = r"[\w.%+-]{1,64}"
+_EMAIL_LOCAL_CHARS = r"\w.%+-"  # class body, shared with the local-part walk
+_EMAIL_LOCAL = rf"[{_EMAIL_LOCAL_CHARS}]{{1,64}}"
 _EMAIL_TLD = (
     rf"(?:(?:(?![{_UNSPACED_SCRIPTS}])[^\W\d_]){{2,24}}"
     rf"|(?:(?=[{_UNSPACED_SCRIPTS}])[^\W\d_]){{2,24}})"
@@ -214,7 +215,7 @@ def _email_should_peel(text: str, start: int, end: int) -> bool:
 
 
 _EMAIL_DOMAIN_RUN_RE = re.compile(r"[\w.-]*")
-_EMAIL_NON_LOCAL_RE = re.compile(r"[^\w.%+-]")
+_EMAIL_NON_LOCAL_RE = re.compile(rf"[^{_EMAIL_LOCAL_CHARS}]")
 
 
 def _find_email(text: str, pos: int) -> re.Match[str] | None:

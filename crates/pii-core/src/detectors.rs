@@ -213,10 +213,11 @@ fn build_email_regex(pattern: &str) -> Regex {
         .unwrap()
 }
 
-/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``).
+/// ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). Candidates
+/// are one address long, so this anchored copy keeps the default DFA cache.
 fn is_full_email(cand: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| build_email_regex(&format!("^(?:{})$", email_pattern())))
+    RE.get_or_init(|| Regex::new(&format!("^(?:{})$", email_pattern())).unwrap())
         .is_match(cand)
 }
 
