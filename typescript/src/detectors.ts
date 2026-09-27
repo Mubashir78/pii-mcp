@@ -201,6 +201,13 @@ function emailEndOk(text: string, end: number): boolean {
   return EMAIL_NEXT_PII_RE.test(text.slice(end));
 }
 
+const EMAIL_FULL_RE = new RegExp(`^(?:${EMAIL_RE.source})$`, "u");
+
+/** ``cand`` is one whole address (Python ``EMAIL_RE.fullmatch``). */
+function isFullEmail(cand: string): boolean {
+  return EMAIL_FULL_RE.test(cand);
+}
+
 function emailShouldPeel(text: string, start: number, end: number): boolean {
   for (let tryEnd = end - 1; tryEnd > start; tryEnd -= 1) {
     if (insideSurrogatePair(text, tryEnd)) {
@@ -209,14 +216,7 @@ function emailShouldPeel(text: string, start: number, end: number): boolean {
     if (!/\p{L}/u.test(charAt(text, tryEnd))) {
       break;
     }
-    const cand = text.slice(start, tryEnd);
-    const full = cloneRegExp(EMAIL_RE);
-    full.lastIndex = 0;
-    const m = full.exec(cand);
-    if (m === null || m.index !== 0 || m[0].length !== cand.length) {
-      continue;
-    }
-    if (EMAIL_NEXT_PII_RE.test(text.slice(tryEnd))) {
+    if (EMAIL_NEXT_PII_RE.test(text.slice(tryEnd)) && isFullEmail(text.slice(start, tryEnd))) {
       return true;
     }
   }
@@ -289,14 +289,7 @@ function scrubEmail(text: string): { text: string; count: number } {
         if (insideSurrogatePair(text, tryEnd)) {
           continue;
         }
-        const cand = text.slice(start, tryEnd);
-        const full = cloneRegExp(EMAIL_RE);
-        full.lastIndex = 0;
-        const m = full.exec(cand);
-        if (m === null || m.index !== 0 || m[0].length !== cand.length) {
-          continue;
-        }
-        if (emailEndOk(text, tryEnd)) {
+        if (isFullEmail(text.slice(start, tryEnd)) && emailEndOk(text, tryEnd)) {
           shortened = tryEnd;
           break;
         }
