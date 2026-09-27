@@ -271,6 +271,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dms_seconds_glued_to_a_word_fall_back_to_minutes() {
+        // Python's lookahead backtracks past the optional seconds; the
+        // linear engine walks the end back instead.
+        let r = scrub_text("N 52°22' E 4°54' 12\"x", None, true).unwrap();
+        assert_eq!(r.text, "[LOCATION] 12\"x");
+        let r = scrub_text("52°22'N\u{3000}4°54'E", None, true).unwrap();
+        assert_eq!(r.text, "[LOCATION]");
+    }
+
+    #[test]
     fn masks_email() {
         let r = scrub_text("Contact ada@example.com for help", None, true).unwrap();
         assert_eq!(r.text, "Contact [EMAIL] for help");
