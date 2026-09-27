@@ -693,9 +693,9 @@ function locationValid(value: string): boolean {
 // needs a degree sign, a minute mark, and a hemisphere letter before or after
 // (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 // glyphs stand in for ``'`` / ``"``.
-// Spacing: ASCII whitespace or the group spaces (nbsp, thin / narrow nbsp);
-// digits stay ASCII so every backend reads them alike.
-const DMS_SEP = String.raw`[ \t\r\n${GROUP_SPACES}]`;
+// Spacing: the shared separator spaces plus line / page breaks, spelled out
+// (not ``\s``) and with ASCII digits so every backend reads a pair alike.
+const DMS_SEP = String.raw`(?:${SEP_SPACE}|[\f\v\x85\u2028\u2029])`;
 const DMS_BODY = String.raw`[0-9]{1,3}${DMS_SEP}?[°º]${DMS_SEP}?[0-9]{1,2}(?:[.,][0-9]{1,4})?${DMS_SEP}?['′’](?:${DMS_SEP}?[0-9]{1,2}(?:[.,][0-9]{1,4})?${DMS_SEP}?(?:["″”]|''|′′))?`;
 const LOCATION_DMS_RE = new RegExp(
   String.raw`(?<![A-Za-z0-9_.])(?:[NSZ]${DMS_SEP}?${DMS_BODY}|${DMS_BODY}${DMS_SEP}?[NSZ])${DMS_SEP}{0,3}[,;/]?${DMS_SEP}{0,3}(?:[EOW]${DMS_SEP}?${DMS_BODY}|${DMS_BODY}${DMS_SEP}?[EOW])(?![A-Za-z0-9_])`,

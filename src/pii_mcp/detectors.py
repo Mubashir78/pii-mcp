@@ -674,9 +674,10 @@ def _location_valid(value: str) -> bool:
 # needs a degree sign, a minute mark, and a hemisphere letter before or after
 # (Dutch / German ``Z`` / ``O`` for south / east); prime and double-prime
 # glyphs stand in for ``'`` / ``"``.
-# Spacing inside a DMS pair: ASCII whitespace or the group spaces (nbsp,
-# thin / narrow nbsp); digits stay ASCII so every backend reads them alike.
-_DMS_SEP = f"[ \\t\\r\\n{_GROUP_SPACES}]"
+# Spacing inside a DMS pair: the shared separator spaces plus line / page
+# breaks, spelled out (not ``\s``) and with ASCII digits so every backend
+# reads a pair alike.
+_DMS_SEP = rf"(?:{_SEP_SPACE}|[\f\v\x85\u2028\u2029])"
 _DMS_BODY = (
     rf"[0-9]{{1,3}}{_DMS_SEP}?[°º]{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?['′’]"
     rf"(?:{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?(?:[\"″”]|''|′′))?"
