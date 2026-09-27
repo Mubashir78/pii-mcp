@@ -191,7 +191,6 @@ def _detectors_for(languages: Sequence[str] | None) -> tuple[Detector, ...]:
         pack.append(phone_en_detector)
     if "de" in langs:
         pack.append(phone_de_detector)
-    if "de" in langs:
         # Before BSN: the last three groups of ``12 345 678 901`` are a
         # spaced 9-digit BSN candidate.
         pack.append(tax_id_detector)

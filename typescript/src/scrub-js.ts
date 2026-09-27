@@ -108,12 +108,9 @@ function detectorsFor(
     pack.push(phoneEnDetector);
   }
   if (langs.includes("de")) {
-    pack.push(phoneDeDetector);
-  }
-  if (langs.includes("de")) {
-    // Before BSN: the last three groups of ``12 345 678 901`` are a spaced
-    // 9-digit BSN candidate.
-    pack.push(taxIdDetector);
+    // Tax id before BSN: the last three groups of ``12 345 678 901`` are a
+    // spaced 9-digit BSN candidate.
+    pack.push(phoneDeDetector, taxIdDetector);
   }
   if (langs.includes("nl")) {
     // BTW-id first: its 9-digit body can itself pass the BSN elfproef.

@@ -1348,16 +1348,23 @@ fn phone_sep_extra() -> String {
 fn phone_international_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
+        let ascii: String = PHONE_INTERNATIONAL_ASCII_SEPS
+            .iter()
+            .map(|c| regex::escape(&c.to_string()))
+            .collect();
         let phone_sep_extra = phone_sep_extra();
         Regex::new(&format!(
-            r"(?:\+|00)\d[\d .()\-{phone_sep_extra}]{{6,20}}\d"
+            r"(?:\+|00)\d[\d{ascii}{phone_sep_extra}]{{6,20}}\d"
         ))
         .unwrap()
     })
 }
 
+/// ASCII separators the international pattern and its rescan both accept.
+const PHONE_INTERNATIONAL_ASCII_SEPS: [char; 5] = [' ', '.', '(', ')', '-'];
+
 fn is_phone_international_sep(c: char) -> bool {
-    matches!(c, ' ' | '.' | '(' | ')' | '-') || is_group_sep(c)
+    PHONE_INTERNATIONAL_ASCII_SEPS.contains(&c) || is_group_sep(c)
 }
 
 /// Unicode decimal digit (``\d`` / Python ``str.isdecimal``). The regex only
@@ -1747,8 +1754,6 @@ fn build_detectors(mask: u8) -> Vec<Detector> {
             category: PiiCategory::Phone,
             scrub: scrub_phone_de,
         });
-    }
-    if has_de {
         // Before BSN: the last three groups of ``12 345 678 901`` are a
         // spaced 9-digit BSN candidate.
         pack.push(Detector {

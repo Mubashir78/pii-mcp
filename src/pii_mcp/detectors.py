@@ -280,8 +280,8 @@ _SEP_SPACE = r"[ \t\r\n\xa0\u2000-\u200a\u202f\u3000]"
 _INVISIBLE = "\u00ad\u200b\u200c\u200d\ufeff"
 # Group separators word processors / PDFs substitute for a typed space or
 # hyphen in ids and phone numbers: nbsp, thin / narrow nbsp, unicode dashes
-# and the minus sign. Character-class fragments, shared by both.
-# The chars double as regex class fragments (none is special in a class).
+# and the minus sign. Plain chars, used as sets and as regex class fragments
+# (none is special inside a class).
 _GROUP_SPACES = "\xa0\u2009\u202f"
 _GROUP_DASHES = "".join(map(chr, range(0x2010, 0x2016))) + "\u2212"
 
@@ -711,7 +711,7 @@ location_detector = Detector(type="location", scrub=_scrub_location)
 # typed space / hyphen into nbsp, thin / narrow nbsp, or a unicode dash.
 _ID_SPACE = f"[ {_GROUP_SPACES}]"
 _ID_DASH = f"[\\-{_GROUP_DASHES}]"
-# Everything the id patterns accept between groups, including the dash range.
+# Everything the id patterns accept between groups.
 _ID_SEP_TABLE = str.maketrans(
     "", "", " ./-" + _GROUP_SPACES + _GROUP_DASHES
 )
@@ -887,12 +887,12 @@ _PHONE_SEP_EXTRA = _GROUP_SPACES + _GROUP_DASHES
 # The span allows more than 15 digits so a ``(0)`` trunk between spaced groups
 # (``+44 (0) 20 7946 0958``) fits; ``_phone_international_end`` re-measures
 # the run.
+# Separators the international pattern and its rescan both accept.
+_PHONE_INTERNATIONAL_SEP_CHARS = " .()-" + _PHONE_SEP_EXTRA
 PHONE_INTERNATIONAL_RE = re.compile(
-    rf"(?<![\w+])(?:\+|00)\d[\d .()\-{_PHONE_SEP_EXTRA}]{{6,20}}\d"
+    rf"(?<![\w+])(?:\+|00)\d[\d{re.escape(_PHONE_INTERNATIONAL_SEP_CHARS)}]{{6,20}}\d"
 )
-
-
-_PHONE_INTERNATIONAL_SEPS = frozenset(" .()-" + _GROUP_SPACES + _GROUP_DASHES)
+_PHONE_INTERNATIONAL_SEPS = frozenset(_PHONE_INTERNATIONAL_SEP_CHARS)
 
 
 def _phone_international_end(text: str, start: int, _end: int) -> int:
