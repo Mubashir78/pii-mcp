@@ -318,7 +318,8 @@ function scrubEmail(text: string): { text: string; count: number } {
 export const emailDetector: Detector = { type: "email", scrub: scrubEmail };
 
 // Unicode Zs separators commonly used in OCR / rich text (thin/figure/nbsp…).
-const SEP_SPACE = String.raw`[ \t\r\n\xa0\u2000-\u200a\u202f\u3000]`;
+const SEP_SPACE_CHARS = String.raw` \t\r\n\xa0\u2000-\u200a\u202f\u3000`; // class body
+const SEP_SPACE = `[${SEP_SPACE_CHARS}]`;
 const INVISIBLE = /[\u00ad\u200b\u200c\u200d\ufeff]/g;
 // Group separators word processors / PDFs substitute for a typed space or
 // hyphen in ids and phone numbers: nbsp, thin / narrow nbsp, unicode dashes
@@ -695,7 +696,7 @@ function locationValid(value: string): boolean {
 // glyphs stand in for ``'`` / ``"``.
 // Spacing: the shared separator spaces plus line / page breaks, spelled out
 // (not ``\s``) and with ASCII digits so every backend reads a pair alike.
-const DMS_SEP = `${SEP_SPACE.slice(0, -1)}${String.raw`\f\v\x85\u2028\u2029`}]`;
+const DMS_SEP = String.raw`[${SEP_SPACE_CHARS}\f\v\x85\u2028\u2029]`;
 const DMS_BODY = String.raw`[0-9]{1,3}${DMS_SEP}?[°º]${DMS_SEP}?[0-9]{1,2}(?:[.,][0-9]{1,4})?${DMS_SEP}?['′’](?:${DMS_SEP}?[0-9]{1,2}(?:[.,][0-9]{1,4})?${DMS_SEP}?(?:["″”]|''|′′))?`;
 const LOCATION_DMS_RE = new RegExp(
   String.raw`(?<![A-Za-z0-9_.])(?:[NSZ]${DMS_SEP}?${DMS_BODY}|${DMS_BODY}${DMS_SEP}?[NSZ])${DMS_SEP}{0,3}[,;/]?${DMS_SEP}{0,3}(?:[EOW]${DMS_SEP}?${DMS_BODY}|${DMS_BODY}${DMS_SEP}?[EOW])(?![A-Za-z0-9_])`,

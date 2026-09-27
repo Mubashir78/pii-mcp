@@ -314,8 +314,10 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
         let start = m.start();
         let mut end = m.end();
         if !email_end_ok(text, end) || email_should_peel(text, start, end) {
-            let shortened = longest_end(text, start, end, |e| {
-                e < end && is_full_email(&text[start..e]) && email_end_ok(text, e)
+            // Only ends before the greedy one: it already failed the checks.
+            let before_end = text[..end].char_indices().next_back().map_or(start, |(i, _)| i);
+            let shortened = longest_end(text, start, before_end, |e| {
+                is_full_email(&text[start..e]) && email_end_ok(text, e)
             });
             match shortened {
                 Some(e) => end = e,
@@ -348,7 +350,12 @@ fn scrub_email(text: &str) -> (Option<String>, u32) {
 /// Spacing between groups: space, tab, CR / LF, and the Unicode Zs spaces
 /// OCR and rich text use (nbsp, thin / figure / ideographic …). Shared by the
 /// IBAN, card, and DMS patterns.
-const SEP_SPACE: &str = r"[ \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}]";
+macro_rules! sep_space_chars {
+    () => {
+        r" \t\r\n\u{00a0}\u{2000}-\u{200a}\u{202f}\u{3000}"
+    };
+}
+const SEP_SPACE: &str = concat!("[", sep_space_chars!(), "]");
 
 fn iban_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
@@ -907,11 +914,7 @@ fn location_valid(value: &str) -> bool {
 /// Spacing: the shared separator spaces plus line / page breaks, spelled out
 /// (not ``\s``) and with ASCII digits so every backend reads a pair alike.
 fn location_dms_pattern() -> String {
-    // One class: the shared spaces plus line / page breaks.
-    let sep = format!(
-        r"{}\f\v\x85\u{{2028}}\u{{2029}}]",
-        SEP_SPACE.strip_suffix(']').unwrap()
-    );
+    let sep = concat!("[", sep_space_chars!(), r"\f\v\x85\u{2028}\u{2029}]");
     let body = format!(
         r#"[0-9]{{1,3}}{sep}?[°º]{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?['′’](?:{sep}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{sep}?(?:["″”]|''|′′))?"#
     );
@@ -934,7 +937,8 @@ fn location_dms_full_re() -> &'static Regex {
 /// runs into a word (``… 4°54' 12"x``), the pattern falls back to a shorter
 /// hit (without the optional seconds, or the spacing before them). Take the
 /// longest prefix that is a whole match with a clean right edge, then
-/// validate it; ``start`` rejects.
+/// validate it; ``start`` rejects. ``end`` must be the end of a
+/// ``location_dms_re`` match at ``start`` (it is not re-matched).
 fn location_dms_end(text: &str, start: usize, end: usize) -> usize {
     if !location_dms_left_ok(text, start) {
         return start;

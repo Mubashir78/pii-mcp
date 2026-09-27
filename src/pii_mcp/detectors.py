@@ -282,7 +282,8 @@ def _scrub_email(text: str) -> tuple[str, int]:
 email_detector = Detector(type="email", scrub=_scrub_email)
 
 # Unicode Zs separators commonly used in OCR / rich text (thin/figure/nbsp…).
-_SEP_SPACE = r"[ \t\r\n\xa0\u2000-\u200a\u202f\u3000]"
+_SEP_SPACE_CHARS = r" \t\r\n\xa0\u2000-\u200a\u202f\u3000"  # class body
+_SEP_SPACE = f"[{_SEP_SPACE_CHARS}]"
 # Soft hyphen + zero-width chars that OCR/copy-paste insert between groups.
 _INVISIBLE = "\u00ad\u200b\u200c\u200d\ufeff"
 # Group separators word processors / PDFs substitute for a typed space or
@@ -677,7 +678,7 @@ def _location_valid(value: str) -> bool:
 # Spacing inside a DMS pair: the shared separator spaces plus line / page
 # breaks, spelled out (not ``\s``) and with ASCII digits so every backend
 # reads a pair alike.
-_DMS_SEP = _SEP_SPACE.removesuffix("]") + r"\f\v\x85\u2028\u2029]"
+_DMS_SEP = rf"[{_SEP_SPACE_CHARS}\f\v\x85\u2028\u2029]"
 _DMS_BODY = (
     rf"[0-9]{{1,3}}{_DMS_SEP}?[°º]{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?['′’]"
     rf"(?:{_DMS_SEP}?[0-9]{{1,2}}(?:[.,][0-9]{{1,4}})?{_DMS_SEP}?(?:[\"″”]|''|′′))?"
