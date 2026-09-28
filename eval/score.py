@@ -12,6 +12,9 @@ loss = 3 * leak_rate + fp_rate + 0.5 * overreach_rate   (lower is better)
 - fp: a clean sample is changed at all
 - overreach: the surrounding template is damaged around a PII value
 
+Per category, recall is the share of values with no leak, and precision is
+hits / (hits + clean samples that gained that category's placeholder).
+
 The last line printed is machine-readable JSON.
 """
 
@@ -107,18 +110,27 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
     leaks: Counter[str] = Counter()
     overreach: Counter[str] = Counter()
     totals: Counter[str] = Counter()
+    cat_totals: Counter[str] = Counter()
+    cat_leaks: Counter[str] = Counter()
+    cat_hits: Counter[str] = Counter()
+    cat_fps: Counter[str] = Counter()
     examples: list[str] = []
     for cat, gen, template, value, langs in pii:
         key = f"{cat}/{gen}"
         totals[key] += 1
+        cat_totals[cat] += 1
         leaked, damaged, out = judge_pii(template, value, langs)
         leaks[key] += leaked
         overreach[key] += damaged
+        cat_leaks[cat] += leaked
+        cat_hits[cat] += not leaked and f"[{cat.upper()}]" in out
         if (leaked or damaged) and len(examples) < show:
             examples.append(f"{'LEAK' if leaked else 'OVER'} {key}: {fill(template, value)!r} -> {out!r}")
     fps: Counter[str] = Counter()
     for name, text in clean:
         out = scrub_text(text, languages=DEFAULT_LANGS)["text"]
+        for placeholder in set(PLACEHOLDER_RE.findall(out)):
+            cat_fps[placeholder[1:-1].lower()] += 1
         if out != text:
             fps[name] += 1
             if len(examples) < show * 2:
@@ -139,6 +151,13 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
         "overreach": {k: round(v / totals[k], 3) for k, v in overreach.most_common() if v},
         "fps": {k: round(v / PER_GENERATOR, 3) for k, v in fps.most_common() if v},
         "ambiguous_masked": {k: round(v / PER_GENERATOR, 3) for k, v in amb.most_common()},
+        "per_category": {
+            cat: {
+                "precision": round(cat_hits[cat] / (cat_hits[cat] + cat_fps[cat]), 4) if cat_hits[cat] + cat_fps[cat] else 0.0,
+                "recall": round(1 - cat_leaks[cat] / n, 4),
+            }
+            for cat, n in sorted(cat_totals.items())
+        },
         "examples": examples,
     }
 
@@ -158,6 +177,9 @@ REDOS_INPUTS = [
     ("aa:" * 5 + "zz ") * 20_000,
     "+" + "1 (" * 60_000,
     "12.3456, " * 40_000,
+    "Aaaa " * 50_000,
+    "A" + "a" * 200_000 + " 1",
+    "1 " + "Aa " * 80_000,
 ]
 
 
@@ -249,7 +271,7 @@ def main() -> None:
 
     for line in result.pop("examples"):
         print(line)
-    for key in ("leaks", "overreach", "fps", "ambiguous_masked"):
+    for key in ("leaks", "overreach", "fps", "ambiguous_masked", "per_category"):
         if result[key]:
             print(f"{key}: {result[key]}")
     print(json.dumps(result))

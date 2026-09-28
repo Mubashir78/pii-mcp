@@ -286,6 +286,29 @@ def license_plate_nl(r: R) -> str:
     return value.lower() if r.random() < 0.1 else value
 
 
+def _house_number(r: R) -> str:
+    number = str(r.randint(1, 999))
+    return number + r.choice(["", "", "", "a", "B", "-2", "/1"])
+
+
+def street_nl(r: R) -> str:
+    name = r.choice(["Kerk", "Molen", "Dorps", "Stations", "Van Baerle", "Prinsen", "Keizers", "Hoofd", "Sint-Jans", "Oranje"])
+    kind = r.choice(["straat", "laan", "weg", "gracht", "plein", "kade", "singel", "dijk", "steeg"])
+    return f"{name}{kind} {_house_number(r)}"
+
+
+def street_de(r: R) -> str:
+    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse'])}"
+    spaced = f"{r.choice(['Berliner', 'Frankfurter', 'Kölner', 'Neuer', 'Alter'])} {r.choice(['Straße', 'Str.', 'Allee', 'Weg', 'Ring'])}"
+    return f"{r.choice([glued, glued, spaced])} {_house_number(r)}"
+
+
+def street_en(r: R) -> str:
+    name = r.choice(["Baker", "High", "Church", "Station", "Oxford", "Victoria", "Old Kent", "Mill", "Pennsylvania", "Park"])
+    kind = r.choice(["Street", "Road", "Lane", "Avenue", "Drive", "Close", "Way", "St", "Rd.", "Ave"])
+    return f"{r.randint(1, 9999)}{r.choice(['', '', 'B'])} {name} {kind}"
+
+
 # (category, generator, languages the detector needs)
 PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("email", email, ()),
@@ -305,6 +328,9 @@ PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("phone", phone_de, ("de",)),
     ("phone", phone_intl, ("en",)),
     ("address", postcode_nl, ("nl",)),
+    ("address", street_nl, ("nl",)),
+    ("address", street_en, ("en",)),
+    ("address", street_de, ("de",)),
     ("license_plate", license_plate_nl, ("nl",)),
 ]
 
@@ -347,6 +373,9 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("order_ref", lambda r: f"ORD-{r.randint(2019, 2026)}-{r.randint(1, 999999):06d}"),
     ("stats", lambda r: f"p50={r.uniform(0, 500):.3f}ms p99={r.uniform(0, 5000):.3f}ms n={r.randint(10, 100000)}"),
     ("coord_like", lambda r: f"scale {r.uniform(-1, 1):.4f}, {r.uniform(-1, 1):.4f}"),
+    ("street_name", lambda r: r.choice(["Kerkstraat", "Baker Street", "Hauptstraße", "Frankfurter Allee", "de Prinsengracht", "Oxford Road"])),
+    ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
+    ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
 ]
 
