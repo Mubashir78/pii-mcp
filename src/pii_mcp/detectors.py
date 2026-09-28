@@ -54,14 +54,17 @@ Patterns:
 - NL postcode (``address``): ``1234 AB`` / ``1234AB`` (one or more spaces)
   with uppercase letters only and SA/SD/SS rejects — structured fragment, not
   street-address NER.
-- Street address (``address``): street name + house number per pack. ``nl``:
-  a capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then
-  the number (``Kerkstraat 12``); ``de``: ``-straße``/``-str.``/``-weg``/… or
-  an ``-er`` adjective / hyphen before ``Straße``/``Allee``/…
-  (``Berliner Straße 17``); ``en``: number, 1–3 capitalized words, then
-  ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up to three
-  capitalized words before the street word are taken with it. A bare street
-  name without a number is not flagged. ``\b`` is ASCII in every backend.
+- Street address (``address``): street name + house number per pack. ``nl``: a
+  capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then the
+  number (``Kerkstraat 12``); ``de``: ``-straße``/``-str.``/``-weg``/… or an
+  ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
+  (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
+  words, then ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up to
+  three capitalized words before the street word are taken with it. A bare
+  street name without a number is not flagged. Suffixes that end common words
+  (``Keypad``, ``Supermarkt``, ``Käufer``) are left out. Up to three spaces,
+  tabs, or no-break spaces separate street and number. ``\b`` is ASCII in every
+  backend.
 - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
   insensitive), with SA/SD/SS letter-pair rejects.
 - Phone packs: international first (any active pack, before national IDs; a
@@ -1055,22 +1058,22 @@ nl_postcode_detector = Detector(type="address", scrub=_scrub_nl_postcode)
 _STREET_UP = r"A-Z\u00c0-\u00d6\u00d8-\u00de"
 _STREET_LOW = r"a-z\u00df-\u00f6\u00f8-\u017f"
 _STREET_WORD = f"[{_STREET_UP}][{_STREET_LOW}]+"
-_STREET_SEP = r"[ \u00a0]"
+_STREET_SEP = r"[ \t\u00a0\u202f]{1,3}"
 _HOUSE_NUMBER = r"[1-9][0-9]{0,4}[A-Za-z]?(?:[-/][0-9]{1,4})?\b"
 _DE_STREET_WORDS = r"(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)"
 
 STREET_NL_RE = re.compile(
     rf"(?:{_STREET_WORD}[ -]){{0,3}}[{_STREET_UP}][{_STREET_LOW}]*"
-    r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)"
+    r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal)"
     rf"{_STREET_SEP}{_HOUSE_NUMBER}",
     re.ASCII,
 )
 STREET_DE_RE = re.compile(
-    rf"(?:{_STREET_WORD}[ -]){{0,3}}(?:"
-    rf"[{_STREET_UP}][{_STREET_LOW}]*(?:straße|strasse|str\b\.?|weg|allee|platz|gasse|damm|ufer)"
+    rf"(?:{_STREET_WORD}[ -]){{0,3}}(?:(?:"
+    rf"[{_STREET_UP}][{_STREET_LOW}]*(?:straße|strasse|str\b\.?|weg|allee|platz|gasse|damm)"
     rf"|[{_STREET_UP}][{_STREET_LOW}]*er {_DE_STREET_WORDS}"
     rf"|[{_STREET_UP}][{_STREET_LOW}]+-{_DE_STREET_WORDS}"
-    rf"){_STREET_SEP}{_HOUSE_NUMBER}",
+    rf"){_STREET_SEP}|[{_STREET_UP}][{_STREET_LOW}]*str\.){_HOUSE_NUMBER}",
     re.ASCII,
 )
 STREET_EN_RE = re.compile(

@@ -1728,12 +1728,12 @@ fn street_res() -> &'static [Regex; 3] {
     static RES: OnceLock<[Regex; 3]> = OnceLock::new();
     RES.get_or_init(|| {
         let word = format!("[{STREET_UP}][{STREET_LOW}]+");
-        let sep = r"[ \u00a0]";
+        let sep = r"[ \t\u00a0\u202f]{1,3}";
         let nl = format!(
-            r"(?:{word}[ -]){{0,3}}[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal){sep}{HOUSE_NUMBER}"
+            r"(?:{word}[ -]){{0,3}}[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal){sep}{HOUSE_NUMBER}"
         );
         let de = format!(
-            r"(?:{word}[ -]){{0,3}}(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm|ufer)|[{STREET_UP}][{STREET_LOW}]*er {DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}{HOUSE_NUMBER}"
+            r"(?:{word}[ -]){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm)|[{STREET_UP}][{STREET_LOW}]*er {DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){HOUSE_NUMBER}"
         );
         let en = format!(
             r"(?-u:\b)[1-9][0-9]{{0,4}}[A-Za-z]?{sep}(?:{word}{sep}){{1,3}}(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)(?-u:\b)\.?"

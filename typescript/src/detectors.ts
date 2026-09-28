@@ -51,12 +51,15 @@
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
  * - Street address (``address``): street name + house number per pack. ``nl``:
  *   a capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then
- *   the number (``Kerkstraat 12``); ``de``: ``-straße``/``-str.``/``-weg``/… or
- *   an ``-er`` adjective / hyphen before ``Straße``/``Allee``/…
- *   (``Berliner Straße 17``); ``en``: number, 1–3 capitalized words, then
- *   ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up to three
- *   capitalized words before the street word are taken with it. A bare street
- *   name without a number is not flagged. ``\b`` is ASCII in every backend.
+ *   the number (``Kerkstraat 12``); ``de``: ``-straße``/``-str.``/``-weg``/…
+ *   or an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
+ *   (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
+ *   words, then ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up
+ *   to three capitalized words before the street word are taken with it. A
+ *   bare street name without a number is not flagged. Suffixes that end common
+ *   words (``Keypad``, ``Supermarkt``, ``Käufer``) are left out. Up to three
+ *   spaces, tabs, or no-break spaces separate street and number. ``\b`` is
+ *   ASCII in every backend.
  * - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
  *   insensitive), with SA/SD/SS letter-pair rejects.
  * - Phone packs: international (any active pack; a ``(0)`` trunk may sit
@@ -1120,25 +1123,25 @@ export const nlPostcodeDetector: Detector = {
   scrub: scrubNlPostcode,
 };
 
-const STREET_UP = String.raw`A-ZÀ-ÖØ-Þ`;
-const STREET_LOW = String.raw`a-zß-öø-ſ`;
+const STREET_UP = String.raw`A-Z\u00c0-\u00d6\u00d8-\u00de`;
+const STREET_LOW = String.raw`a-z\u00df-\u00f6\u00f8-\u017f`;
 const STREET_WORD = `[${STREET_UP}][${STREET_LOW}]+`;
-const STREET_SEP = String.raw`[  ]`;
+const STREET_SEP = String.raw`[ \t\u00a0\u202f]{1,3}`;
 const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]?(?:[-/][0-9]{1,4})?\b`;
 const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)`;
 
 const STREET_NL_RE = new RegExp(
   `(?:${STREET_WORD}[ -]){0,3}[${STREET_UP}][${STREET_LOW}]*` +
-    "(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)" +
+    "(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal)" +
     `${STREET_SEP}${HOUSE_NUMBER}`,
   "g",
 );
 const STREET_DE_RE = new RegExp(
-  `(?:${STREET_WORD}[ -]){0,3}(?:` +
-    `[${STREET_UP}][${STREET_LOW}]*(?:straße|strasse|str\\b\\.?|weg|allee|platz|gasse|damm|ufer)` +
+  `(?:${STREET_WORD}[ -]){0,3}(?:(?:` +
+    `[${STREET_UP}][${STREET_LOW}]*(?:straße|strasse|str\\b\\.?|weg|allee|platz|gasse|damm)` +
     `|[${STREET_UP}][${STREET_LOW}]*er ${DE_STREET_WORDS}` +
     `|[${STREET_UP}][${STREET_LOW}]+-${DE_STREET_WORDS}` +
-    `)${STREET_SEP}${HOUSE_NUMBER}`,
+    `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NUMBER}`,
   "g",
 );
 const STREET_EN_RE = new RegExp(
