@@ -26,6 +26,7 @@ pub enum PiiCategory {
     VatId,
     Passport,
     Phone,
+    Person,
     Address,
     LicensePlate,
 }
@@ -47,6 +48,7 @@ impl PiiCategory {
             Self::VatId => "vat_id",
             Self::Passport => "passport",
             Self::Phone => "phone",
+            Self::Person => "person",
             Self::Address => "address",
             Self::LicensePlate => "license_plate",
         }

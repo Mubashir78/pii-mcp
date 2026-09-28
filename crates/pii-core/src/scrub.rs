@@ -127,11 +127,26 @@ fn bump_count(counts: &mut PiiCounts, cat: PiiCategory, n: u32) {
     }
 }
 
+/// Fail unless the NER pass can run: built with the `ner` feature and a
+/// loadable model.
+fn require_ner() -> Result<(), PiiScrubError> {
+    #[cfg(feature = "ner")]
+    return crate::ner::ensure_loaded();
+    #[cfg(not(feature = "ner"))]
+    Err(PiiScrubError::new(
+        "ner=true needs pii-core built with the `ner` feature",
+    ))
+}
+
 /// Mask pattern-detectable PII in a string using an already-normalized language pack.
+///
+/// With `ner`, a person-name pass runs last, on the already-masked text
+/// (see the `ner` module); the caller must have checked [`require_ner`].
 pub fn scrub_text_langs(
     text: &str,
     langs: &[LanguageCode],
     check_size: bool,
+    ner: bool,
 ) -> Result<ScrubResult, PiiScrubError> {
     if check_size && text.len() > MAX_SCRUB_BYTES {
         return Err(PiiScrubError::new(format!(
@@ -148,6 +163,18 @@ pub fn scrub_text_langs(
             out = Cow::Owned(s);
         }
     }
+    #[cfg(feature = "ner")]
+    if ner {
+        let (next, n) = crate::ner::scrub_persons(out.as_ref())?;
+        bump_count(&mut counts, PiiCategory::Person, n);
+        if let Some(s) = next {
+            out = Cow::Owned(s);
+        }
+    }
+    #[cfg(not(feature = "ner"))]
+    if ner {
+        require_ner()?;
+    }
     Ok(ScrubResult {
         found: total_pii_count(&counts) > 0,
         text: out.into_owned(),
@@ -155,14 +182,18 @@ pub fn scrub_text_langs(
     })
 }
 
-/// Mask pattern-detectable PII in a string.
+/// Mask pattern-detectable PII in a string. `ner` adds the person-name pass.
 pub fn scrub_text(
     text: &str,
     languages: Option<&[String]>,
     check_size: bool,
+    ner: bool,
 ) -> Result<ScrubResult, PiiScrubError> {
     let langs = normalize_languages(languages)?;
-    scrub_text_langs(text, &langs, check_size)
+    if ner {
+        require_ner()?;
+    }
+    scrub_text_langs(text, &langs, check_size, ner)
 }
 
 #[cfg(feature = "payload")]
@@ -201,6 +232,7 @@ mod payload {
         counts: &mut PiiCounts,
         depth: usize,
         langs: &[LanguageCode],
+        ner: bool,
     ) -> Result<Value, PiiScrubError> {
         if depth > MAX_DEPTH {
             return Err(PiiScrubError::new(format!(
@@ -209,7 +241,7 @@ mod payload {
         }
         match value {
             Value::String(s) => {
-                let result = scrub_text_langs(&s, langs, false)?;
+                let result = scrub_text_langs(&s, langs, false, ner)?;
                 for t in PII_TYPES {
                     if let Some(slot) = counts.get_mut(*t) {
                         *slot += result.counts.get(*t).copied().unwrap_or(0);
@@ -220,14 +252,14 @@ mod payload {
             Value::Array(items) => {
                 let mut out = Vec::with_capacity(items.len());
                 for item in items {
-                    out.push(scrub_walk(item, counts, depth + 1, langs)?);
+                    out.push(scrub_walk(item, counts, depth + 1, langs, ner)?);
                 }
                 Ok(Value::Array(out))
             }
             Value::Object(map) => {
                 let mut out = serde_json::Map::new();
                 for (key, item) in map {
-                    out.insert(key, scrub_walk(item, counts, depth + 1, langs)?);
+                    out.insert(key, scrub_walk(item, counts, depth + 1, langs, ner)?);
                 }
                 Ok(Value::Object(out))
             }
@@ -242,10 +274,11 @@ mod payload {
         pub counts: PiiCounts,
     }
 
-    /// Walk a JSON value and mask string leaves.
+    /// Walk a JSON value and mask string leaves. `ner` adds the person-name pass.
     pub fn scrub_payload(
         payload: Value,
         languages: Option<&[String]>,
+        ner: bool,
     ) -> Result<PayloadScrubResult, PiiScrubError> {
         if payload_string_bytes(&payload, 0)? > MAX_SCRUB_BYTES {
             return Err(PiiScrubError::new(format!(
@@ -253,8 +286,11 @@ mod payload {
             )));
         }
         let langs = normalize_languages(languages)?;
+        if ner {
+            require_ner()?;
+        }
         let mut counts = empty_pii_counts();
-        let scrubbed = scrub_walk(payload, &mut counts, 0, &langs)?;
+        let scrubbed = scrub_walk(payload, &mut counts, 0, &langs, ner)?;
         Ok(PayloadScrubResult {
             found: total_pii_count(&counts) > 0,
             payload: scrubbed,
@@ -273,16 +309,16 @@ mod tests {
     #[test]
     fn decimal_location_backtracks_its_optional_tails() {
         // Python's order: drop the E/W group, then the degree sign.
-        let r = scrub_text("52.3676, 4.9041°Ex", None, true).unwrap();
+        let r = scrub_text("52.3676, 4.9041°Ex", None, true, false).unwrap();
         assert_eq!(r.text, "[LOCATION]°Ex");
-        let r = scrub_text("52.3676, 4.904152°22", None, true).unwrap();
+        let r = scrub_text("52.3676, 4.904152°22", None, true, false).unwrap();
         assert_eq!(r.text, "[LOCATION]°22");
         // Only two cuts: a long space run before the tail stays linear
         // (400k spaces: milliseconds, where a full walk-back takes minutes).
         let spaces = " ".repeat(400_000);
         let text = format!("52.3676, 4.9041{spaces}Ex");
         let started = std::time::Instant::now();
-        let r = scrub_text(&text, None, true).unwrap();
+        let r = scrub_text(&text, None, true, false).unwrap();
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
         assert_eq!(r.text, format!("[LOCATION]{spaces}Ex"));
     }
@@ -291,10 +327,10 @@ mod tests {
     fn dms_seconds_glued_to_a_word_fall_back_to_minutes() {
         // Python's lookahead backtracks past the optional seconds; the
         // linear engine walks the end back instead.
-        let r = scrub_text("N 52°22' E 4°54' 12\"x", None, true).unwrap();
+        let r = scrub_text("N 52°22' E 4°54' 12\"x", None, true, false).unwrap();
         assert_eq!(r.text, "[LOCATION] 12\"x");
         for sep in ['\u{3000}', '\u{0c}', '\u{0b}', '\u{85}', '\u{2028}', '\u{2029}'] {
-            let r = scrub_text(&format!("52°22'N{sep}4°54'E"), None, true).unwrap();
+            let r = scrub_text(&format!("52°22'N{sep}4°54'E"), None, true, false).unwrap();
             assert_eq!(r.text, "[LOCATION]", "separator {sep:?}");
         }
     }
@@ -304,19 +340,19 @@ mod tests {
         // ``(?!@)`` emulation: the span Python's backtracking picks, even when
         // it lies past the shortening walk's cap.
         let text = format!("a@ex.com.{}.{}.xx@y", "1".repeat(63), "1".repeat(63));
-        let r = scrub_text(&text, None, true).unwrap();
+        let r = scrub_text(&text, None, true, false).unwrap();
         assert_eq!(r.text, format!("[EMAIL]{}", &text["a@ex.com".len()..]));
         // No quadratic re-walk when a long domain runs into ``@``.
         let text = format!("{}@{}cc@", "a".repeat(64), "b.".repeat(2000));
-        assert_eq!(scrub_text(&text, None, true).unwrap().text, text);
+        assert_eq!(scrub_text(&text, None, true, false).unwrap().text, text);
         // Capped walk: a long domain with a glued TLD is masked as found.
         let text = format!("a@{}{}", "b.".repeat(2000), "c".repeat(30));
-        assert_eq!(scrub_text(&text, None, true).unwrap().text, "[EMAIL]cccccc");
+        assert_eq!(scrub_text(&text, None, true, false).unwrap().text, "[EMAIL]cccccc");
     }
 
     #[test]
     fn masks_email() {
-        let r = scrub_text("Contact ada@example.com for help", None, true).unwrap();
+        let r = scrub_text("Contact ada@example.com for help", None, true, false).unwrap();
         assert_eq!(r.text, "Contact [EMAIL] for help");
         assert!(r.found);
         assert_eq!(r.counts["email"], 1);
@@ -324,14 +360,14 @@ mod tests {
 
     #[test]
     fn masks_glued_emails() {
-        let r = scrub_text("a@b.comc@d.com", None, true).unwrap();
+        let r = scrub_text("a@b.comc@d.com", None, true, false).unwrap();
         assert_eq!(r.text, "[EMAIL][EMAIL]");
         assert_eq!(r.counts["email"], 2);
     }
 
     #[test]
     fn email_tld_does_not_eat_iban() {
-        let r = scrub_text("ada@example.comNL91ABNA0417164300", None, true).unwrap();
+        let r = scrub_text("ada@example.comNL91ABNA0417164300", None, true, false).unwrap();
         assert_eq!(r.text, "[EMAIL][IBAN]");
         assert_eq!(r.counts["email"], 1);
         assert_eq!(r.counts["iban"], 1);
@@ -339,94 +375,94 @@ mod tests {
 
     #[test]
     fn masks_iban_and_card() {
-        let r = scrub_text("Pay NL91ABNA0417164300 with 4111111111111111", None, true).unwrap();
+        let r = scrub_text("Pay NL91ABNA0417164300 with 4111111111111111", None, true, false).unwrap();
         assert_eq!(r.text, "Pay [IBAN] with [CREDIT_CARD]");
     }
 
     #[test]
     fn masks_dashed_and_mixed_case_iban() {
-        let dashed = scrub_text("Pay NL91-ABNA-0417-1643-00 please", None, true).unwrap();
+        let dashed = scrub_text("Pay NL91-ABNA-0417-1643-00 please", None, true, false).unwrap();
         assert_eq!(dashed.text, "Pay [IBAN] please");
         assert_eq!(dashed.counts["iban"], 1);
         assert_eq!(dashed.counts["phone"], 0);
 
-        let mixed = scrub_text("Pay Nl91 AbNa 0417 1643 00 please", None, true).unwrap();
+        let mixed = scrub_text("Pay Nl91 AbNa 0417 1643 00 please", None, true, false).unwrap();
         assert_eq!(mixed.text, "Pay [IBAN] please");
         assert_eq!(mixed.counts["iban"], 1);
 
-        let slash = scrub_text("Pay NL91/ABNA/0417/1643/00 please", None, true).unwrap();
+        let slash = scrub_text("Pay NL91/ABNA/0417/1643/00 please", None, true, false).unwrap();
         assert_eq!(slash.text, "Pay [IBAN] please");
         assert_eq!(slash.counts["iban"], 1);
     }
 
     #[test]
     fn masks_grouped_card_separators_and_mapped_ip() {
-        let card = scrub_text("card 4111.1111.1111.1111", None, true).unwrap();
+        let card = scrub_text("card 4111.1111.1111.1111", None, true, false).unwrap();
         assert_eq!(card.text, "card [CREDIT_CARD]");
         assert_eq!(card.counts["credit_card"], 1);
 
-        let mapped = scrub_text("peer ::ffff:192.0.2.1 ok", None, true).unwrap();
+        let mapped = scrub_text("peer ::ffff:192.0.2.1 ok", None, true, false).unwrap();
         assert_eq!(mapped.text, "peer [IP] ok");
         assert_eq!(mapped.counts["ip"], 1);
     }
 
     #[test]
     fn masks_card_iban_glue_email_ssn_degree_nanp_double_spaced_iban() {
-        let glue = scrub_text("4111111111111111NL91ABNA0417164300", None, true).unwrap();
+        let glue = scrub_text("4111111111111111NL91ABNA0417164300", None, true, false).unwrap();
         assert_eq!(glue.text, "[CREDIT_CARD][IBAN]");
 
         let langs = vec!["en".to_string()];
         let email_ssn =
-            scrub_text("ada@example.com078-05-1120", Some(&langs), true).unwrap();
+            scrub_text("ada@example.com078-05-1120", Some(&langs), true, false).unwrap();
         assert_eq!(email_ssn.text, "[EMAIL][SSN]");
 
-        let loc = scrub_text("52.3676°, 4.9041°", None, true).unwrap();
+        let loc = scrub_text("52.3676°, 4.9041°", None, true, false).unwrap();
         assert_eq!(loc.text, "[LOCATION]");
 
-        let phone = scrub_text("(415)555-0132", Some(&langs), true).unwrap();
+        let phone = scrub_text("(415)555-0132", Some(&langs), true, false).unwrap();
         assert_eq!(phone.text, "[PHONE]");
 
-        let iban = scrub_text("NL91  ABNA  0417  1643  00", None, true).unwrap();
+        let iban = scrub_text("NL91  ABNA  0417  1643  00", None, true, false).unwrap();
         assert_eq!(iban.text, "[IBAN]");
     }
 
     #[test]
     fn masks_email_ip_mac_location_slash_ssn_padded_ip() {
         assert_eq!(
-            scrub_text("ada@example.com192.0.2.1", None, true)
+            scrub_text("ada@example.com192.0.2.1", None, true, false)
                 .unwrap()
                 .text,
             "[EMAIL][IP]"
         );
         assert_eq!(
-            scrub_text("ada@example.comaa:bb:cc:dd:ee:ff", None, true)
+            scrub_text("ada@example.comaa:bb:cc:dd:ee:ff", None, true, false)
                 .unwrap()
                 .text,
             "[EMAIL][MAC]"
         );
         assert_eq!(
-            scrub_text("ada@example.com52.3676,4.9041", None, true)
+            scrub_text("ada@example.com52.3676,4.9041", None, true, false)
                 .unwrap()
                 .text,
             "[EMAIL][LOCATION]"
         );
         let en = vec!["en".to_string()];
         assert_eq!(
-            scrub_text("078/05/1120", Some(&en), true).unwrap().text,
+            scrub_text("078/05/1120", Some(&en), true, false).unwrap().text,
             "[SSN]"
         );
         assert_eq!(
-            scrub_text("192.168.001.001", None, true).unwrap().text,
+            scrub_text("192.168.001.001", None, true, false).unwrap().text,
             "[IP]"
         );
         assert_eq!(
-            scrub_text("52.3676 N, 4.9041 E", None, true)
+            scrub_text("52.3676 N, 4.9041 E", None, true, false)
                 .unwrap()
                 .text,
             "[LOCATION]"
         );
         assert_eq!(
-            scrub_text("NL91\u{200b}ABNA0417164300", None, true)
+            scrub_text("NL91\u{200b}ABNA0417164300", None, true, false)
                 .unwrap()
                 .text,
             "[IBAN]"
@@ -436,21 +472,30 @@ mod tests {
     #[test]
     fn language_gate_bsn() {
         let langs = vec!["en".to_string()];
-        let r = scrub_text("BSN 100000009 on file", Some(&langs), true).unwrap();
+        let r = scrub_text("BSN 100000009 on file", Some(&langs), true, false).unwrap();
         assert_eq!(r.counts["bsn"], 0);
+    }
+
+    #[cfg(not(feature = "ner"))]
+    #[test]
+    fn ner_without_feature_is_an_error() {
+        let err = scrub_text("Ada Lovelace", None, true, true).unwrap_err();
+        assert!(err.to_string().contains("`ner` feature"));
+        let err = scrub_payload(serde_json::json!([]), None, true).unwrap_err();
+        assert!(err.to_string().contains("`ner` feature"));
     }
 
     #[test]
     fn unknown_language() {
         let langs = vec!["fr".to_string()];
-        let err = scrub_text("hi", Some(&langs), true).unwrap_err();
+        let err = scrub_text("hi", Some(&langs), true, false).unwrap_err();
         assert!(err.to_string().contains("unknown language"));
     }
 
     #[test]
     fn clean_text_unchanged() {
         let t = "The server exposes a search tool and a fetch tool.";
-        let r = scrub_text(t, None, true).unwrap();
+        let r = scrub_text(t, None, true, false).unwrap();
         assert_eq!(r.text, t);
         assert!(!r.found);
     }
