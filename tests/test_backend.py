@@ -58,7 +58,12 @@ def test_ner_unavailable_raises(
 )
 def test_ner_masks_person_names(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PII_MCP_BACKEND", "native")
-    result = scrub_text("Mail Ada Lovelace at ada@example.com", ner=True)
+    try:
+        result = scrub_text("Mail Ada Lovelace at ada@example.com", ner=True)
+    except PiiScrubError as exc:
+        if "`ner` feature" not in str(exc):
+            raise
+        pytest.skip("native extension built without the ner feature")
     assert result["text"] == "Mail [PERSON] at [EMAIL]"
     assert result["counts"]["person"] == 1
     assert result["counts"]["email"] == 1
