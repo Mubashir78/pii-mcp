@@ -1,11 +1,11 @@
 # pii-mcp
 
 Pattern-based PII scrubbing for MCP servers (regex + checksums), with an
-optional NER pass for person names in the Rust backend. Masks emails,
-IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax
-IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number addresses, Dutch
-postcodes, and Dutch license plates in tool results. Language packs: `en`,
-`nl`, and opt-in `de`.
+optional NER pass for person names in the Rust backend. Masks emails, IBANs,
+cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax IDs,
+Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number
+addresses, Dutch postcodes, and Dutch license plates in tool results.
+Language packs: `en`, `nl`, and opt-in `de`.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
 [![npm](https://img.shields.io/npm/v/pii-mcp.svg)](https://www.npmjs.com/package/pii-mcp)
@@ -117,7 +117,8 @@ scrub_text("Mail Ada Lovelace at ada@example.com", ner=True)
 - Pattern hits are masked first; the NER pass never re-tags a placeholder, so
   nothing is counted twice.
 - `PII_MCP_NER_THRESHOLD` (default `0.9`) is the minimum person probability
-  per token.
+  per token. The default favors precision; lower it (for example `0.5`) to
+  mask more names at the cost of more false positives.
 - `ner=True` raises `PiiScrubError` when the build has no `ner` feature, the
   backend is pure Python / TypeScript, or the model directory is missing or
   invalid. Text is never returned with the NER pass silently skipped.
@@ -131,12 +132,17 @@ Cost on macOS arm64 (M4 Pro), `scripts/bench_backends.py` with
 | 2 KiB tool result  | 0.22 ms    | 532 ms     |
 | 16 KiB tool result | 2.3 ms     | 4.6 s      |
 
-Model load takes 2.0 s once per process; peak RSS is about 2.4 GB.
+Model load takes 2.0 s once per process; peak RSS is about 2.4 GB. Inference
+is fp32 only: candle's XLM-R implementation builds its attention mask in F32,
+so fp16 weights do not run.
 
 On the eval (`PII_MCP_NER_MODEL=<dir> python eval/score.py --ner`, EN/NL/DE
 names in 15 contexts), `person` scores recall 0.967 and precision 0.930. Most
-false positives are company names such as `Albert Heijn`. Street addresses
-score 1.0 / 1.0 in both modes.
+false positives are company names such as `Albert Heijn`. The address
+generators only produce the street shapes the patterns support, so the
+address recall of 1.0 covers those shapes only; precision is measured against
+bare street names, company names, and words that end in a street suffix
+(`Keypad 3`, `Supermarkt 24`).
 
 ## Packages
 

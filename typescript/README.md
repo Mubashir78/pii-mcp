@@ -3,8 +3,8 @@
 Pattern-based PII scrubbing for MCP servers (regex + checksums). Same detectors
 as the Python package: emails, IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates,
 BSNs, US SSNs, German tax IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones,
-Dutch postcodes, and Dutch license plates. Language packs: `en`, `nl`, and
-opt-in `de`.
+street + house number addresses, Dutch postcodes, and Dutch license plates.
+Language packs: `en`, `nl`, and opt-in `de`.
 
 FastMCP middleware stays Python-only (`pii_mcp.fastmcp`); this package is the
 core scrub API for Node/TypeScript callers.
@@ -34,6 +34,24 @@ npm run build:native   # requires a Rust toolchain; needs ../crates/pii-core
 When the napi addon is loadable, `scrubText` / `scrubPayload` use it.
 Force the JS path with `PII_MCP_BACKEND=js`. Require native with
 `PII_MCP_BACKEND=native`.
+
+#### Person names (optional NER)
+
+Build the addon with the `ner` feature and point `PII_MCP_NER_MODEL` at the
+model directory (download command in the
+[main README](../README.md#person-names-optional-ner)):
+
+```bash
+npm run build:native -- --features ner
+```
+
+```ts
+scrubText("Mail Ada Lovelace at ada@example.com", { ner: true });
+// { text: "Mail [PERSON] at [EMAIL]", ... }
+```
+
+`ner: true` throws `PiiScrubError` on the pure TypeScript backend, on an addon
+built without `ner`, and when the model directory is missing or invalid.
 
 #### Performance (TypeScript vs Rust release)
 

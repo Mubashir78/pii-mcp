@@ -1,9 +1,10 @@
 /**
  * Pattern-based PII scrubbing for MCP tool/resource/prompt results.
  *
- * Sync, in-process, regex + checksum detectors. Does not include NER for
- * person names or full street addresses (e.g. Presidio). Optional Rust
- * acceleration via the napi addon built from ``crates/pii-mcp-napi``.
+ * Sync, in-process, regex + checksum detectors, including street + house
+ * number addresses. Optional Rust acceleration via the napi addon built from
+ * ``crates/pii-mcp-napi``; person names need ``ner: true`` and an addon built
+ * with the ``ner`` feature.
  */
 
 export {
