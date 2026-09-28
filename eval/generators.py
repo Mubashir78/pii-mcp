@@ -396,15 +396,18 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("coord_like", lambda r: f"scale {r.uniform(-1, 1):.4f}, {r.uniform(-1, 1):.4f}"),
     ("street_name", lambda r: r.choice(["Kerkstraat", "Baker Street", "Hauptstraße", "Frankfurter Allee", "de Prinsengracht", "Oxford Road"])),
     ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
+    ("suffix_word", lambda r: r.choice(["Use the Keypad 3 times", "Open Notepad 2 now", "Supermarkt 24 uur open", "Gerechtshof 2 oordeelde", "Der Käufer 2 zahlt"])),
     ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
 ]
 
 # Clean text that looks like PII to any pattern matcher (bare 9-digit ids vs
-# BSN/SSN). Reported, not scored: flipping these trades recall for precision.
+# BSN/SSN, a number before a real street word). Reported, not scored: flipping
+# these trades recall for precision.
 AMBIGUOUS: list[tuple[str, Callable[[R], str]]] = [
     ("nine_digit_id", lambda r: f"invoice {r.randint(100_000_000, 999_999_999)}"),
     ("semver4", lambda r: f"{r.randint(1, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}"),
+    ("street_word_phrase", lambda r: r.choice(["Chapter 12 Main Street", "In 2024 Times Square was busy", "I bought 2 Hard Drive units", "Parkplatz 12 ist frei"])),
     ("decimal_pair", lambda r: f"{r.uniform(2, 80):.4f}, {r.uniform(2, 80):.4f}"),
 ]
 
