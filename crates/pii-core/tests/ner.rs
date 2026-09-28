@@ -27,6 +27,11 @@ fn ner_pass() {
     assert_eq!(r.text, "[PERSON] [EMAIL] [PERSON]");
     assert_eq!(r.counts["email"], 1);
 
+    let r = scrub_text("<td>Pieter de Vries</td>", None, true, true).unwrap();
+    assert_eq!(r.text, "<td>[PERSON]</td>");
+    let r = scrub_text("value=Emma de Vries status=ok", None, true, true).unwrap();
+    assert_eq!(r.text, "value=[PERSON] status=ok");
+
     let r = scrub_text("Frau Anna Müller wohnt in der Hauptstraße 5.", Some(&["de".into()]), true, true)
         .unwrap();
     assert_eq!(r.text, "Frau [PERSON] wohnt in der [ADDRESS].");

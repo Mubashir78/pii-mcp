@@ -14,7 +14,8 @@
 //! text is skipped. Long text is split into overlapping windows of the
 //! model's sequence length, and each token keeps the label from the window
 //! where it sits farthest from an edge. A token counts as a person when
-//! `P(B-PER) + P(I-PER)` reaches `PII_MCP_NER_THRESHOLD` (default 0.9).
+//! `P(B-PER) + P(I-PER)` reaches `PII_MCP_NER_THRESHOLD` (default 0.9), or
+//! at least 0.3 right after a person token.
 //! Spans are widened to whole words, so a name split into sub-word tokens is
 //! masked whole.
 
@@ -30,6 +31,7 @@ use tokenizers::Tokenizer;
 pub const MODEL_ENV: &str = "PII_MCP_NER_MODEL";
 pub const THRESHOLD_ENV: &str = "PII_MCP_NER_THRESHOLD";
 const DEFAULT_THRESHOLD: f32 = 0.9;
+const CONTINUE: f32 = 0.3;
 /// Content tokens per window: 512 positions minus `<s>` and `</s>`.
 const WINDOW: usize = 510;
 const OVERLAP: usize = 128;
@@ -133,9 +135,8 @@ pub fn ensure_loaded() -> Result<(), PiiScrubError> {
 }
 
 impl Ner {
-    /// Per content token: `Some(true)` begins a person, `Some(false)`
-    /// continues one, `None` is not a person.
-    fn classify(&self, ids: &[u32]) -> candle_core::Result<Vec<Option<bool>>> {
+    /// `(P(B-PER), P(I-PER))` per content token.
+    fn classify(&self, ids: &[u32]) -> candle_core::Result<Vec<(f32, f32)>> {
         let n = ids.len() + 2;
         let mut input = Vec::with_capacity(n);
         input.push(self.bos);
@@ -151,25 +152,24 @@ impl Ner {
             .to_vec2()?;
         Ok(probs[1..n - 1]
             .iter()
-            .map(|p| {
-                let (b, i) = (p[self.b_per], p[self.i_per]);
-                (b + i >= self.threshold).then_some(b >= i)
-            })
+            .map(|p| (p[self.b_per], p[self.i_per]))
             .collect())
     }
 
+    /// Per token: `Some(true)` begins a person, `Some(false)` continues one,
+    /// `None` is not a person.
     fn labels(&self, ids: &[u32]) -> candle_core::Result<Vec<Option<bool>>> {
-        let mut out = vec![None; ids.len()];
+        let mut probs = vec![(0.0, 0.0); ids.len()];
         let mut depth = vec![0usize; ids.len()];
         let mut start = 0;
         while start < ids.len() {
             let end = (start + WINDOW).min(ids.len());
-            for (j, label) in self.classify(&ids[start..end])?.into_iter().enumerate() {
+            for (j, p) in self.classify(&ids[start..end])?.into_iter().enumerate() {
                 let i = start + j;
                 let d = (j + 1).min(end - i);
                 if d > depth[i] {
                     depth[i] = d;
-                    out[i] = label;
+                    probs[i] = p;
                 }
             }
             if end == ids.len() {
@@ -177,8 +177,21 @@ impl Ner {
             }
             start = end - OVERLAP;
         }
-        Ok(out)
+        Ok(decide(&probs, self.threshold))
     }
+}
+
+/// A token is a person at `threshold`. Right after a person token, the bar
+/// drops to `CONTINUE`, so a surname the model scores lower than the first
+/// name is not left out.
+fn decide(probs: &[(f32, f32)], threshold: f32) -> Vec<Option<bool>> {
+    let mut out: Vec<Option<bool>> = Vec::with_capacity(probs.len());
+    for &(b, i) in probs {
+        let after_person = out.last().is_some_and(Option::is_some);
+        let bar = if after_person { CONTINUE.min(threshold) } else { threshold };
+        out.push((b + i >= bar).then_some(b >= i && !after_person));
+    }
+    out
 }
 
 fn placeholder_re() -> &'static Regex {
@@ -314,6 +327,17 @@ mod tests {
         let text = "Jan [EMAIL] de Vries, [PHONE]";
         assert_eq!(cut_placeholders(text, &[(0, 20)]), vec![(0, 3), (12, 20)]);
         assert_eq!(cut_placeholders(text, &[(22, 29)]), vec![]);
+    }
+
+    #[test]
+    fn low_scored_surname_joins_the_name_before_it() {
+        let probs = [(0.94, 0.0), (0.49, 0.36), (0.0, 0.32), (0.0, 0.66), (0.0, 0.1)];
+        assert_eq!(
+            decide(&probs, 0.9),
+            vec![Some(true), Some(false), Some(false), Some(false), None]
+        );
+        let alone = [(0.0, 0.0), (0.1, 0.6)];
+        assert_eq!(decide(&alone, 0.9), vec![None, None]);
     }
 
     #[test]
