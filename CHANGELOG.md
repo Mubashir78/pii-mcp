@@ -1,3 +1,9 @@
+## [1.7.1](https://github.com/foro-sh/pii-mcp/compare/v1.7.0...v1.7.1) (2026-09-28)
+
+### Bug Fixes
+
+* **python:** bump pyo3 to 0.29 for GHSA-36hh-v3qg-5jq4 ([89cb91b](https://github.com/foro-sh/pii-mcp/commit/89cb91b2aaf5cd4a33cbdc9c1162bb2fe8d8f9f7))
+
 ## [1.7.0](https://github.com/foro-sh/pii-mcp/compare/v1.6.0...v1.7.0) (2026-09-28)
 
 ### Features
