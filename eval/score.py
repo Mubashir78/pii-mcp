@@ -10,7 +10,7 @@
 loss = 3 * leak_rate + fp_rate + 0.5 * overreach_rate   (lower is better)
 
 - leak: any alphanumeric of the PII value survives in the output
-- fp: a clean sample is changed at all
+- fp: a clean sample is changed at all (every pack on, so ``de`` is covered)
 - overreach: the surrounding template is damaged around a PII value
 
 ``person`` needs the NER pass, so only ``--ner`` scores it: that mode uses
@@ -56,6 +56,7 @@ PLACEHOLDER_RE = re.compile(
     r"|PASSPORT|PHONE|PERSON|ADDRESS|LICENSE_PLATE)\]"
 )
 DEFAULT_LANGS = ["en", "nl"]
+ALL_LANGS = ["en", "nl", "de"]
 NER_CATEGORIES = ("person", "address")
 NER = False
 
@@ -138,7 +139,7 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
             examples.append(f"{'LEAK' if leaked else 'OVER'} {key}: {fill(template, value)!r} -> {out!r}")
     fps: Counter[str] = Counter()
     for name, text in clean:
-        out = scrub_text(text, languages=DEFAULT_LANGS, ner=NER)["text"]
+        out = scrub_text(text, languages=ALL_LANGS, ner=NER)["text"]
         for placeholder in set(PLACEHOLDER_RE.findall(out)):
             cat_fps[placeholder[1:-1].lower()] += 1
         if out != text:
@@ -146,7 +147,7 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
             if len(examples) < show * 2:
                 examples.append(f"FP   {name}: {text!r} -> {out!r}")
     amb: Counter[str] = Counter(
-        name for name, text in ambiguous if scrub_text(text, languages=DEFAULT_LANGS, ner=NER)["text"] != text
+        name for name, text in ambiguous if scrub_text(text, languages=ALL_LANGS, ner=NER)["text"] != text
     )
     n_pii, n_clean = len(pii), len(clean)
     leak_rate = sum(leaks.values()) / n_pii
