@@ -1718,7 +1718,7 @@ fn scrub_nl_postcode(text: &str) -> (Option<String>, u32) {
 
 const STREET_UP: &str = r"A-Z\u00c0-\u00d6\u00d8-\u00de";
 const STREET_LOW: &str = r"a-z\u00df-\u00f6\u00f8-\u017f";
-const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]?(?:[-/][0-9]{1,4})?(?-u:\b)";
+const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?(?-u:\b)";
 const DE_STREET_WORDS: &str =
     r"(?:Straße|Strasse|Str(?-u:\b)\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)";
 
@@ -1729,17 +1729,31 @@ fn street_res() -> &'static [Regex; 3] {
     RES.get_or_init(|| {
         let word = format!("[{STREET_UP}][{STREET_LOW}]+");
         let sep = r"[ \t\u00a0\u202f]{1,3}";
+        let gap = format!("(?:{sep}|-)");
         let nl = format!(
-            r"(?:{word}[ -]){{0,3}}[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal){sep}{HOUSE_NUMBER}"
+            r"(?:{word}{gap}){{0,3}}[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal){sep}{HOUSE_NUMBER}"
         );
         let de = format!(
-            r"(?:{word}[ -]){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm)|[{STREET_UP}][{STREET_LOW}]*er {DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){HOUSE_NUMBER}"
+            r"(?:{word}{gap}){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm)|[{STREET_UP}][{STREET_LOW}]*er{sep}{DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){HOUSE_NUMBER}"
         );
         let en = format!(
-            r"(?-u:\b)[1-9][0-9]{{0,4}}[A-Za-z]?{sep}(?:{word}{sep}){{1,3}}(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)(?-u:\b)\.?"
+            r"(?-u:\b)[1-9][0-9]{{0,4}}(?:[-/][0-9]{{1,4}})?[A-Za-z]?{sep}(?:{word}{sep}){{1,3}}(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)(?-u:\b)\.?"
         );
         [nl, de, en].map(|p| Regex::new(&p).unwrap())
     })
+}
+
+const DE_FUNCTION_WORDS: &[&str] = &[
+    "Der", "Hier", "Oder", "Aber", "Wieder", "Jeder", "Jener", "Einer", "Keiner", "Immer",
+    "Unser", "Euer", "Weder", "Außer",
+];
+
+fn de_street_valid(value: &str) -> bool {
+    let first = value
+        .split(|c: char| c.is_whitespace() || c == '-')
+        .next()
+        .unwrap_or("");
+    !DE_FUNCTION_WORDS.contains(&first)
 }
 
 fn scrub_street(text: &str, pattern: &Regex) -> (Option<String>, u32) {
@@ -1751,7 +1765,13 @@ fn scrub_street_nl(text: &str) -> (Option<String>, u32) {
 }
 
 fn scrub_street_de(text: &str) -> (Option<String>, u32) {
-    scrub_street(text, &street_res()[1])
+    replace_matches(
+        text,
+        &street_res()[1],
+        "[ADDRESS]",
+        |v, _, _| de_street_valid(v),
+        true,
+    )
 }
 
 fn scrub_street_en(text: &str) -> (Option<String>, u32) {

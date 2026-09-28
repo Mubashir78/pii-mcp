@@ -272,6 +272,11 @@ describe("scrubText", () => {
     ["Kerkstraat  12", "nl", "[ADDRESS]"],
     ["Kerkstraat\t12", "nl", "[ADDRESS]"],
     ["Kerkstraat\u202f12", "nl", "[ADDRESS]"],
+    ["Kerkstraat 12bis", "nl", "[ADDRESS]"],
+    ["ship to 221-223 Baker Street", "en", "ship to [ADDRESS]"],
+    ["Berliner\u00a0Straße 17", "de", "[ADDRESS]"],
+    ["Berliner  Straße 17", "de", "[ADDRESS]"],
+    ["Der Hauptstraße 5", "de", "Der [ADDRESS]"],
   ])("masks street address %j (%s)", (text, lang, expected) => {
     const result = scrubText(text, { languages: [lang] });
     expect(result.text).toBe(expected);
@@ -282,7 +287,10 @@ describe("scrubText", () => {
     ["de Kerkstraat is afgesloten", "nl"],
     ["Mr Baker Street", "en"],
     ["Amsterdam 2024", "nl"],
-    ["Kerkstraat 12abc", "nl"],
+    ["Hier Platz 5", "de"],
+    ["Wieder Platz 2 für Bayern", "de"],
+    ["Der Weg 3 ist frei", "de"],
+    ["Oder Ring 3", "de"],
     ["took 12 Main Streetcar", "en"],
     ["Auf Platz 3 landete", "de"],
     ["Spring 2024", "de"],

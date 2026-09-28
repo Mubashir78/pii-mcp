@@ -58,8 +58,10 @@
  *   to three capitalized words before the street word are taken with it. A
  *   bare street name without a number is not flagged. Suffixes that end common
  *   words (``Keypad``, ``Supermarkt``, ``Käufer``) are left out. Up to three
- *   spaces, tabs, or no-break spaces separate street and number. ``\b`` is
- *   ASCII in every backend.
+ *   spaces, tabs, or no-break spaces separate street and number. German
+ *   function words that end in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not
+ *   start a DE match. House numbers may carry up to three letters and a range
+ *   (``12bis``, ``221-223``). ``\b`` is ASCII in every backend.
  * - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
  *   insensitive), with SA/SD/SS letter-pair rejects.
  * - Phone packs: international (any active pack; a ``(0)`` trunk may sit
@@ -1127,39 +1129,50 @@ const STREET_UP = String.raw`A-Z\u00c0-\u00d6\u00d8-\u00de`;
 const STREET_LOW = String.raw`a-z\u00df-\u00f6\u00f8-\u017f`;
 const STREET_WORD = `[${STREET_UP}][${STREET_LOW}]+`;
 const STREET_SEP = String.raw`[ \t\u00a0\u202f]{1,3}`;
-const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]?(?:[-/][0-9]{1,4})?\b`;
+const STREET_GAP = `(?:${STREET_SEP}|-)`;
+const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b`;
 const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)`;
 
 const STREET_NL_RE = new RegExp(
-  `(?:${STREET_WORD}[ -]){0,3}[${STREET_UP}][${STREET_LOW}]*` +
+  `(?:${STREET_WORD}${STREET_GAP}){0,3}[${STREET_UP}][${STREET_LOW}]*` +
     "(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal)" +
     `${STREET_SEP}${HOUSE_NUMBER}`,
   "g",
 );
 const STREET_DE_RE = new RegExp(
-  `(?:${STREET_WORD}[ -]){0,3}(?:(?:` +
+  `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:(?:` +
     `[${STREET_UP}][${STREET_LOW}]*(?:straße|strasse|str\\b\\.?|weg|allee|platz|gasse|damm)` +
-    `|[${STREET_UP}][${STREET_LOW}]*er ${DE_STREET_WORDS}` +
+    `|[${STREET_UP}][${STREET_LOW}]*er${STREET_SEP}${DE_STREET_WORDS}` +
     `|[${STREET_UP}][${STREET_LOW}]+-${DE_STREET_WORDS}` +
     `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NUMBER}`,
   "g",
 );
 const STREET_EN_RE = new RegExp(
-  String.raw`\b[1-9][0-9]{0,4}[A-Za-z]?` +
+  String.raw`\b[1-9][0-9]{0,4}(?:[-/][0-9]{1,4})?[A-Za-z]?` +
     `${STREET_SEP}(?:${STREET_WORD}${STREET_SEP}){1,3}` +
     String.raw`(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)\b\.?`,
   "g",
 );
 
-function streetDetector(pattern: RegExp): Detector {
+const DE_FUNCTION_WORDS = new Set([
+  "Der", "Hier", "Oder", "Aber", "Wieder", "Jeder", "Jener", "Einer", "Keiner",
+  "Immer", "Unser", "Euer", "Weder", "Außer",
+]);
+
+function deStreetValid(value: string): boolean {
+  return !DE_FUNCTION_WORDS.has(value.split(/[\s-]/, 1)[0] ?? "");
+}
+
+function streetDetector(pattern: RegExp, isValid?: (value: string) => boolean): Detector {
   return {
     type: "address",
-    scrub: (text) => replaceMatches(text, pattern, "[ADDRESS]"),
+    scrub: (text) =>
+      replaceMatches(text, pattern, "[ADDRESS]", isValid, isValid !== undefined),
   };
 }
 
 export const streetNlDetector = streetDetector(STREET_NL_RE);
-export const streetDeDetector = streetDetector(STREET_DE_RE);
+export const streetDeDetector = streetDetector(STREET_DE_RE, deStreetValid);
 export const streetEnDetector = streetDetector(STREET_EN_RE);
 
 const NL_LICENSE_PLATE_RE =

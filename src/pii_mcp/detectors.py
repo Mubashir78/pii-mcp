@@ -63,8 +63,10 @@ Patterns:
   three capitalized words before the street word are taken with it. A bare
   street name without a number is not flagged. Suffixes that end common words
   (``Keypad``, ``Supermarkt``, ``Käufer``) are left out. Up to three spaces,
-  tabs, or no-break spaces separate street and number. ``\b`` is ASCII in every
-  backend.
+  tabs, or no-break spaces separate street and number. German function words
+  that end in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not start a DE match.
+  House numbers may carry up to three letters and a range (``12bis``,
+  ``221-223``). ``\b`` is ASCII in every backend.
 - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
   insensitive), with SA/SD/SS letter-pair rejects.
 - Phone packs: international first (any active pack, before national IDs; a
@@ -1059,37 +1061,55 @@ _STREET_UP = r"A-Z\u00c0-\u00d6\u00d8-\u00de"
 _STREET_LOW = r"a-z\u00df-\u00f6\u00f8-\u017f"
 _STREET_WORD = f"[{_STREET_UP}][{_STREET_LOW}]+"
 _STREET_SEP = r"[ \t\u00a0\u202f]{1,3}"
-_HOUSE_NUMBER = r"[1-9][0-9]{0,4}[A-Za-z]?(?:[-/][0-9]{1,4})?\b"
+_STREET_GAP = rf"(?:{_STREET_SEP}|-)"
+_HOUSE_NUMBER = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b"
 _DE_STREET_WORDS = r"(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)"
 
 STREET_NL_RE = re.compile(
-    rf"(?:{_STREET_WORD}[ -]){{0,3}}[{_STREET_UP}][{_STREET_LOW}]*"
+    rf"(?:{_STREET_WORD}{_STREET_GAP}){{0,3}}[{_STREET_UP}][{_STREET_LOW}]*"
     r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal)"
     rf"{_STREET_SEP}{_HOUSE_NUMBER}",
     re.ASCII,
 )
 STREET_DE_RE = re.compile(
-    rf"(?:{_STREET_WORD}[ -]){{0,3}}(?:(?:"
+    rf"(?:{_STREET_WORD}{_STREET_GAP}){{0,3}}(?:(?:"
     rf"[{_STREET_UP}][{_STREET_LOW}]*(?:straße|strasse|str\b\.?|weg|allee|platz|gasse|damm)"
-    rf"|[{_STREET_UP}][{_STREET_LOW}]*er {_DE_STREET_WORDS}"
+    rf"|[{_STREET_UP}][{_STREET_LOW}]*er{_STREET_SEP}{_DE_STREET_WORDS}"
     rf"|[{_STREET_UP}][{_STREET_LOW}]+-{_DE_STREET_WORDS}"
     rf"){_STREET_SEP}|[{_STREET_UP}][{_STREET_LOW}]*str\.){_HOUSE_NUMBER}",
     re.ASCII,
 )
 STREET_EN_RE = re.compile(
-    rf"\b[1-9][0-9]{{0,4}}[A-Za-z]?{_STREET_SEP}(?:{_STREET_WORD}{_STREET_SEP}){{1,3}}"
+    rf"\b[1-9][0-9]{{0,4}}(?:[-/][0-9]{{1,4}})?[A-Za-z]?{_STREET_SEP}"
+    rf"(?:{_STREET_WORD}{_STREET_SEP}){{1,3}}"
     r"(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent"
     r"|Terrace|Square|St|Rd|Ave|Ln|Blvd)\b\.?",
     re.ASCII,
 )
 
 
-def _scrub_street(pattern: re.Pattern[str]) -> Callable[[str], tuple[str, int]]:
-    return lambda text: _replace_matches(text, pattern, "[ADDRESS]")
+_DE_FUNCTION_WORDS = frozenset(
+    {"Der", "Hier", "Oder", "Aber", "Wieder", "Jeder", "Jener", "Einer", "Keiner",
+     "Immer", "Unser", "Euer", "Weder", "Außer"}
+)
+
+
+def _de_street_valid(value: str) -> bool:
+    return re.split(r"[\s-]", value, maxsplit=1)[0] not in _DE_FUNCTION_WORDS
+
+
+def _scrub_street(
+    pattern: re.Pattern[str], is_valid: Callable[[str], bool] | None = None
+) -> Callable[[str], tuple[str, int]]:
+    return lambda text: _replace_matches(
+        text, pattern, "[ADDRESS]", is_valid, retry=is_valid is not None
+    )
 
 
 street_nl_detector = Detector(type="address", scrub=_scrub_street(STREET_NL_RE))
-street_de_detector = Detector(type="address", scrub=_scrub_street(STREET_DE_RE))
+street_de_detector = Detector(
+    type="address", scrub=_scrub_street(STREET_DE_RE, _de_street_valid)
+)
 street_en_detector = Detector(type="address", scrub=_scrub_street(STREET_EN_RE))
 
 # Hyphenated RDW sidecodes 1–14 only (compact forms are too collision-prone).
