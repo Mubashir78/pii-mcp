@@ -3,6 +3,7 @@
     python eval/score.py                  # dev split, all gates
     python eval/score.py --quick          # dev split, skip pytest/perf gates
     python eval/score.py --save-baseline  # record perf baseline for this machine
+    PII_MCP_NER_MODEL=<dir> python eval/score.py --ner  # person + address, native NER
     PII_EVAL_HOLDOUT_SEED=<secret> PII_EVAL_HOLDOUT_TEMPLATES=<file> \
         python eval/score.py --split holdout
 
@@ -11,6 +12,11 @@ loss = 3 * leak_rate + fp_rate + 0.5 * overreach_rate   (lower is better)
 - leak: any alphanumeric of the PII value survives in the output
 - fp: a clean sample is changed at all
 - overreach: the surrounding template is damaged around a PII value
+
+``person`` needs the NER pass, so only ``--ner`` scores it: that mode uses
+the native backend with ``ner=True`` (a ``--features ner`` build), scores
+only ``person`` and ``address`` values plus the clean samples, and takes a
+third of the samples per generator because NER is slow.
 
 Per category, recall is the share of values with no leak, and precision is
 hits / (hits + clean samples that gained that category's placeholder).
@@ -50,6 +56,8 @@ PLACEHOLDER_RE = re.compile(
     r"|PASSPORT|PHONE|PERSON|ADDRESS|LICENSE_PLATE)\]"
 )
 DEFAULT_LANGS = ["en", "nl"]
+NER_CATEGORIES = ("person", "address")
+NER = False
 
 
 def fill(template: str, value: str) -> str:
@@ -80,21 +88,23 @@ def load_private_templates(path: str) -> list[str]:
     return [t for _, t in templates]
 
 
-def build(seed: int, templates: list[str] = TEMPLATES) -> tuple[list[tuple], list[tuple], list[tuple]]:
+def build(seed: int, templates: list[str] = TEMPLATES, ner: bool = False) -> tuple[list[tuple], list[tuple], list[tuple]]:
     r = random.Random(seed)
+    n = PER_GENERATOR // 3 if ner else PER_GENERATOR
+    generators = [g for g in PII if (g[0] in NER_CATEGORIES if ner else g[0] != "person")]
     pii = [
         (cat, gen.__name__, r.choice(templates), gen(r), sorted(set(DEFAULT_LANGS) | set(langs)))
-        for cat, gen, langs in PII
-        for _ in range(PER_GENERATOR)
+        for cat, gen, langs in generators
+        for _ in range(n)
     ]
-    clean = [(name, fill(r.choice(templates), gen(r))) for name, gen in CLEAN for _ in range(PER_GENERATOR)]
-    ambiguous = [(name, fill(r.choice(templates), gen(r))) for name, gen in AMBIGUOUS for _ in range(PER_GENERATOR)]
+    clean = [(name, fill(r.choice(templates), gen(r))) for name, gen in CLEAN for _ in range(n)]
+    ambiguous = [(name, fill(r.choice(templates), gen(r))) for name, gen in AMBIGUOUS for _ in range(n)]
     return pii, clean, ambiguous
 
 
 def judge_pii(template: str, value: str, langs: list[str]) -> tuple[bool, bool, str]:
     """(leaked, overreach, output)."""
-    out = scrub_text(fill(template, value), languages=langs)["text"]
+    out = scrub_text(fill(template, value), languages=langs, ner=NER)["text"]
     marked = PLACEHOLDER_RE.sub("\x00", out)
     pre, suf = template.split("{}")
     if marked.startswith(pre) and marked.endswith(suf) and len(marked) >= len(pre) + len(suf):
@@ -106,7 +116,7 @@ def judge_pii(template: str, value: str, langs: list[str]) -> tuple[bool, bool, 
 
 
 def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
-    pii, clean, ambiguous = build(seed, templates)
+    pii, clean, ambiguous = build(seed, templates, ner=NER)
     leaks: Counter[str] = Counter()
     overreach: Counter[str] = Counter()
     totals: Counter[str] = Counter()
@@ -128,7 +138,7 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
             examples.append(f"{'LEAK' if leaked else 'OVER'} {key}: {fill(template, value)!r} -> {out!r}")
     fps: Counter[str] = Counter()
     for name, text in clean:
-        out = scrub_text(text, languages=DEFAULT_LANGS)["text"]
+        out = scrub_text(text, languages=DEFAULT_LANGS, ner=NER)["text"]
         for placeholder in set(PLACEHOLDER_RE.findall(out)):
             cat_fps[placeholder[1:-1].lower()] += 1
         if out != text:
@@ -136,7 +146,7 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
             if len(examples) < show * 2:
                 examples.append(f"FP   {name}: {text!r} -> {out!r}")
     amb: Counter[str] = Counter(
-        name for name, text in ambiguous if scrub_text(text, languages=DEFAULT_LANGS)["text"] != text
+        name for name, text in ambiguous if scrub_text(text, languages=DEFAULT_LANGS, ner=NER)["text"] != text
     )
     n_pii, n_clean = len(pii), len(clean)
     leak_rate = sum(leaks.values()) / n_pii
@@ -149,8 +159,8 @@ def score(seed: int, show: int, templates: list[str] = TEMPLATES) -> dict:
         "overreach_rate": round(over_rate, 5),
         "leaks": {k: round(v / totals[k], 3) for k, v in leaks.most_common() if v},
         "overreach": {k: round(v / totals[k], 3) for k, v in overreach.most_common() if v},
-        "fps": {k: round(v / PER_GENERATOR, 3) for k, v in fps.most_common() if v},
-        "ambiguous_masked": {k: round(v / PER_GENERATOR, 3) for k, v in amb.most_common()},
+        "fps": {k: round(v * len(CLEAN) / n_clean, 3) for k, v in fps.most_common() if v},
+        "ambiguous_masked": {k: round(v * len(CLEAN) / n_clean, 3) for k, v in amb.most_common()},
         "per_category": {
             cat: {
                 "precision": round(cat_hits[cat] / (cat_hits[cat] + cat_fps[cat]), 4) if cat_hits[cat] + cat_fps[cat] else 0.0,
@@ -241,8 +251,13 @@ def main() -> None:
     ap.add_argument("--split", choices=["dev", "holdout"], default="dev")
     ap.add_argument("--quick", action="store_true", help="skip pytest and perf gates")
     ap.add_argument("--save-baseline", action="store_true")
+    ap.add_argument("--ner", action="store_true", help="score person + address with the native NER pass")
     ap.add_argument("--show", type=int, default=15, help="failure examples to print")
     args = ap.parse_args()
+    if args.ner:
+        global NER
+        NER = True
+        os.environ["PII_MCP_BACKEND"] = "native"
 
     if args.save_baseline:
         BASELINE.write_text(json.dumps({"perf_s": perf_seconds()}))
@@ -263,7 +278,7 @@ def main() -> None:
 
     result = score(seed, 0 if args.split == "holdout" else args.show, templates)
     gates = {"redos": gate_redos()}
-    if not args.quick:
+    if not args.quick and not args.ner:
         gates["pytest"] = gate_pytest()
         gates["perf"] = gate_perf()
     result["gates_failed"] = {k: v for k, v in gates.items() if v}
