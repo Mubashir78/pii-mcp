@@ -38,7 +38,7 @@ fn scrub_text<'py>(
     ner: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let result = py
-        .allow_threads(|| core_scrub_text(text, languages.as_deref(), true, ner))
+        .detach(|| core_scrub_text(text, languages.as_deref(), true, ner))
         .map_err(scrub_error)?;
     let out = PyDict::new(py);
     out.set_item("text", result.text)?;
@@ -71,14 +71,14 @@ fn py_to_value(obj: &Bound<'_, PyAny>, depth: usize) -> PyResult<Value> {
     if let Ok(s) = obj.extract::<String>() {
         return Ok(Value::String(s));
     }
-    if let Ok(list) = obj.downcast::<PyList>() {
+    if let Ok(list) = obj.cast::<PyList>() {
         let mut items = Vec::with_capacity(list.len());
         for item in list.iter() {
             items.push(py_to_value(&item, depth + 1)?);
         }
         return Ok(Value::Array(items));
     }
-    if let Ok(dict) = obj.downcast::<PyDict>() {
+    if let Ok(dict) = obj.cast::<PyDict>() {
         let mut map = serde_json::Map::new();
         for (key, value) in dict.iter() {
             let k: String = key.extract()?;
@@ -137,7 +137,7 @@ fn scrub_payload<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let value = py_to_value(&payload, 0)?;
     let result = py
-        .allow_threads(|| core_scrub_payload(value, languages.as_deref(), ner))
+        .detach(|| core_scrub_payload(value, languages.as_deref(), ner))
         .map_err(scrub_error)?;
     let out = PyDict::new(py);
     out.set_item("payload", value_to_py(py, result.payload)?)?;
