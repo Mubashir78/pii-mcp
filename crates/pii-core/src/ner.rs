@@ -9,11 +9,11 @@
 //! The pass runs on text the pattern detectors already masked. The model
 //! sees placeholders as spaces of the same length (so offsets still match),
 //! and placeholders are cut out of person spans afterwards, so regex hits are
-//! never counted twice and the name parts around them are still masked. Truncation and padding
-//! settings in `tokenizer.json` are cleared, so no text is skipped.
-//! Long text is split into overlapping windows of the model's sequence
-//! length, and each token keeps the label from the window where it sits
-//! farthest from an edge. A token counts as a person when
+//! never counted twice and the name parts around them are still masked.
+//! Truncation and padding settings in `tokenizer.json` are cleared, so no
+//! text is skipped. Long text is split into overlapping windows of the
+//! model's sequence length, and each token keeps the label from the window
+//! where it sits farthest from an edge. A token counts as a person when
 //! `P(B-PER) + P(I-PER)` reaches `PII_MCP_NER_THRESHOLD` (default 0.9).
 //! Spans are widened to whole words, so a name split into sub-word tokens is
 //! masked whole.

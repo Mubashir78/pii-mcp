@@ -294,11 +294,14 @@ def _house_number(r: R) -> str:
 def street_nl(r: R) -> str:
     name = r.choice(["Kerk", "Molen", "Dorps", "Stations", "Van Baerle", "Prinsen", "Keizers", "Hoofd", "Sint-Jans", "Oranje"])
     kind = r.choice(["straat", "laan", "weg", "gracht", "plein", "kade", "singel", "dijk", "steeg", "markt", "hof", "pad"])
-    return f"{name}{kind} {_house_number(r)}"
+    glued = f"{name}{kind}"
+    spaced = f"{r.choice(['Grote', 'Oude', 'Nieuwe', 'Korte'])} {r.choice(['Markt', 'Gracht', 'Kade', 'Haven'])}"
+    prefixed = f"{r.choice(['Laan', 'Weg', 'Plein'])} {r.choice(['van', 'van de', 'op'])} {r.choice(['Meerdervoort', 'Nieuw Oost-Indië', 'Zuid'])}"
+    return f"{r.choice([glued, glued, glued, spaced, prefixed])} {_house_number(r)}"
 
 
 def street_de(r: R) -> str:
-    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse', 'ufer'])}"
+    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse', 'ufer', 'ring'])}"
     spaced = f"{r.choice(['Berliner', 'Frankfurter', 'Kölner', 'Neuer', 'Alter'])} {r.choice(['Straße', 'Str.', 'Allee', 'Weg', 'Ring'])}"
     return f"{r.choice([glued, glued, spaced])} {_house_number(r)}"
 

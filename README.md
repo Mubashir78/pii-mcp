@@ -132,15 +132,14 @@ Cost on macOS arm64 (M4 Pro), `scripts/bench_backends.py` with
 | 2 KiB tool result  | 0.22 ms    | 532 ms     |
 | 16 KiB tool result | 2.3 ms     | 4.6 s      |
 
-Inference time grows with input length, at about 0.3 s per KiB here: a
-1 MiB tool result takes about 5 minutes. Use `ner=True` for results of a
-few KiB, not for bulk text. Model load takes 2.0 s once per process; peak
-RSS is about 2.4 GB. Inference
-is fp32 only: candle's XLM-R implementation builds its attention mask in F32,
-so fp16 weights do not run.
+Inference time grows with input length, at about 0.3 s per KiB here: a 1 MiB
+tool result takes about 5 minutes. Use `ner=True` for results of a few KiB,
+not for bulk text. Model load takes 2.0 s once per process; peak RSS is about
+2.4 GB. Inference is fp32 only: candle's XLM-R implementation builds its
+attention mask in F32, so fp16 weights do not run.
 
 On the eval (`PII_MCP_NER_MODEL=<dir> python eval/score.py --ner`, EN/NL/DE
-names in 15 contexts), `person` scores recall 0.967 and precision 0.930. Most
+names in 15 contexts), `person` scores recall 0.970 and precision 0.939. Most
 false positives are company names such as `Albert Heijn`. The address
 generators only produce the street shapes the patterns support, so the
 address recall of 1.0 covers those shapes only; precision is measured with
