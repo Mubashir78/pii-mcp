@@ -397,6 +397,7 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("order_ref", lambda r: f"ORD-{r.randint(2019, 2026)}-{r.randint(1, 999999):06d}"),
     ("stats", lambda r: f"p50={r.uniform(0, 500):.3f}ms p99={r.uniform(0, 5000):.3f}ms n={r.randint(10, 100000)}"),
     ("coord_like", lambda r: f"scale {r.uniform(-1, 1):.4f}, {r.uniform(-1, 1):.4f}"),
+    ("street_word_en", lambda r: r.choice(["The Park 12 tickets", "Theme Park 2 opens", "Safe Haven 3 is out"])),
     ("street_name", lambda r: r.choice(["Kerkstraat", "Baker Street", "Hauptstraße", "Frankfurter Allee", "de Prinsengracht", "Oxford Road"])),
     ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
     ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
