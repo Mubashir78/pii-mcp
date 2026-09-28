@@ -1,8 +1,9 @@
 /**
  * Shared types and constants for pattern-based PII scrubbing.
  *
- * Sync, in-process, regex + checksum detectors. Does not include NER for
- * person names or full street addresses (e.g. Presidio).
+ * Sync, in-process, regex + checksum detectors, including street + house
+ * number addresses. Person names need ``ner: true`` and the napi addon built
+ * with the optional ``ner`` feature.
  */
 
 export const PII_TYPES = [

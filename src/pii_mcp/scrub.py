@@ -3,9 +3,10 @@
 Universal detectors (email, IBAN, credit card, BIC, MAC, IMEI, IP, location)
 always run. Locale packs add national IDs / phone shapes / NL postcodes /
 kentekens / BTW-ids / passport numbers. Counts always include every
-``PiiType`` key (0 when unused), including ``person`` (filled only by the
-optional Rust NER pass). ``address`` counts street + house number hits and
-NL postcodes.
+``PiiType`` key (0 when unused). ``person`` is filled only by ``ner=True``,
+which runs a person-name NER pass after the pattern detectors and needs the
+native extension built with the ``ner`` feature (see the README).
+``address`` counts street + house number hits and NL postcodes.
 
 ``MAX_SCRUB_BYTES`` matches foro-proxy (32 MiB). Oversize raises
 ``PiiScrubError`` so callers withhold rather than forward unscrubbed text.
@@ -232,16 +233,25 @@ def _payload_string_bytes(value: Any, depth: int = 0) -> int:
     return 0
 
 
+_NER_UNAVAILABLE = (
+    "ner=True needs the native backend built with the ner feature "
+    "(maturin develop --release --features ner)"
+)
+
+
 def scrub_text(
     text: str,
     *,
     languages: Sequence[str] | None = None,
+    ner: bool = False,
     _check_size: bool = True,
 ) -> dict[str, Any]:
     """Mask pattern-detectable PII in a string. Returns ``{text, found, counts}``.
 
+    ``ner=True`` adds the person-name pass (native ``ner`` build only).
+
     Raises ``PiiScrubError`` when ``_check_size`` and input exceeds
-    ``MAX_SCRUB_BYTES``.
+    ``MAX_SCRUB_BYTES``, or when ``ner`` is requested but unavailable.
     """
     if not isinstance(text, str):
         raise TypeError("scrub_text expects a str")
@@ -250,11 +260,16 @@ def scrub_text(
         assert _native_mod is not None
         try:
             if languages is None:
-                return dict(_native_mod.scrub_text(text))
-            return dict(_native_mod.scrub_text(text, languages=list(languages)))
+                return dict(_native_mod.scrub_text(text, ner=ner))
+            return dict(
+                _native_mod.scrub_text(text, languages=list(languages), ner=ner)
+            )
         except Exception as exc:  # noqa: BLE001 — remap native errors
             _raise_native_error(exc)
             raise
+
+    if ner:
+        raise PiiScrubError(_NER_UNAVAILABLE)
 
     if _check_size and _utf8_size(text) > MAX_SCRUB_BYTES:
         raise PiiScrubError(
@@ -301,21 +316,29 @@ def scrub_payload(
     payload: Any,
     *,
     languages: Sequence[str] | None = None,
+    ner: bool = False,
 ) -> dict[str, Any]:
     """Walk a JSON-like payload and mask string leaves. Fails closed on errors.
 
-    Size is enforced on string leaves before the walk. Non-plain objects and
-    oversize input raise ``PiiScrubError``.
+    ``ner=True`` adds the person-name pass (native ``ner`` build only).
+
+    Size is enforced on string leaves before the walk. Non-plain objects,
+    oversize input, and an unavailable ``ner`` pass raise ``PiiScrubError``.
     """
     if _resolve_backend() == "native":
         assert _native_mod is not None
         try:
             if languages is None:
-                return dict(_native_mod.scrub_payload(payload))
-            return dict(_native_mod.scrub_payload(payload, languages=list(languages)))
+                return dict(_native_mod.scrub_payload(payload, ner=ner))
+            return dict(
+                _native_mod.scrub_payload(payload, languages=list(languages), ner=ner)
+            )
         except Exception as exc:  # noqa: BLE001 — remap native errors
             _raise_native_error(exc)
             raise
+
+    if ner:
+        raise PiiScrubError(_NER_UNAVAILABLE)
 
     if _payload_string_bytes(payload) > MAX_SCRUB_BYTES:
         raise PiiScrubError(

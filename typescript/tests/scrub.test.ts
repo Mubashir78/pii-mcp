@@ -623,6 +623,21 @@ describe("native backend", () => {
     }
   });
 
+  it("fails closed when ner is requested without a ner build or model", () => {
+    const saved = process.env.PII_MCP_NER_MODEL;
+    delete process.env.PII_MCP_NER_MODEL;
+    try {
+      expect(() => scrubText("Ada Lovelace", { ner: true })).toThrow(PiiScrubError);
+      expect(() => scrubPayload({ to: "Ada Lovelace" }, { ner: true })).toThrow(
+        PiiScrubError,
+      );
+    } finally {
+      if (saved !== undefined) {
+        process.env.PII_MCP_NER_MODEL = saved;
+      }
+    }
+  });
+
   it("forces js backend even when native is present", () => {
     process.env.PII_MCP_BACKEND = "js";
     resetNativeCache();
