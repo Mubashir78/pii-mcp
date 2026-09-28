@@ -477,6 +477,12 @@ class TestStreetAddress:
             ("Laan van Meerdervoort 52", "nl", "[ADDRESS]"),
             ("Laan van Nieuw Oost-Indië 5", "nl", "[ADDRESS]"),
             ("Hohenzollernring 12", "de", "[ADDRESS]"),
+            ("Kerkstraat nr. 12", "nl", "[ADDRESS]"),
+            ("Hauptstraße Nr. 5", "de", "[ADDRESS]"),
+            ("123 Main Dr", "en", "[ADDRESS]"),
+            ("5 Elm Ct.", "en", "[ADDRESS]"),
+            ("12 Park Row", "en", "[ADDRESS]"),
+            ("lives at 221B Baker Street.", "en", "lives at [ADDRESS]."),
         ],
     )
     def test_masks_street_and_house_number(self, text: str, lang: str, expected: str) -> None:

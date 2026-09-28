@@ -61,14 +61,16 @@ Patterns:
   ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/… or an ``-er`` adjective /
   hyphen before ``Straße``/``Allee``/``Platz``/… (``Berliner Straße 17``,
   ``Hauptstr.5``); ``en``: number, 1–3 capitalized words, then
-  ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up to three
-  capitalized words before the street word are taken with it. A bare street
-  name without a number is not flagged. Recall comes first: a word that ends in
-  a street suffix is masked with its number (``Keypad 3``, ``Supermarkt 24``).
-  Up to three spaces, tabs, or no-break spaces separate street and number.
-  German function words that end in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do
-  not start a DE match. House numbers may carry up to three letters and a range
-  (``12bis``, ``221-223``). ``\b`` is ASCII in every backend.
+  ``Street``/``Road``/``Avenue``/… or an abbreviation with an optional dot
+  (``221B Baker Street``, ``5 Elm Ct.``). Up to three capitalized words before
+  the street word are taken with it. A bare street name without a number is not
+  flagged. Recall comes first: a word that ends in a street suffix is masked
+  with its number (``Keypad 3``, ``Supermarkt 24``). Up to three spaces, tabs,
+  or no-break spaces separate street and number. German function words that end
+  in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not start a DE match. House
+  numbers may carry up to three letters and a range (``12bis``, ``221-223``),
+  after an optional ``Nr.``/``no`` in ``nl`` and ``de``. ``\b`` is ASCII in
+  every backend.
 - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
   insensitive), with SA/SD/SS letter-pair rejects.
 - Phone packs: international first (any active pack, before national IDs; a
@@ -1065,6 +1067,7 @@ _STREET_WORD = f"[{_STREET_UP}][{_STREET_LOW}]+"
 _STREET_SEP = r"[ \t\u00a0\u202f]{1,3}"
 _STREET_GAP = rf"(?:{_STREET_SEP}|-)"
 _HOUSE_NUMBER = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b"
+_HOUSE_NR = rf"(?:(?:[Nn]r|[Nn]o)\.?{_STREET_SEP})?{_HOUSE_NUMBER}"
 _DE_STREET_WORDS = r"(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)"
 
 _NL_STREET_WORDS = (
@@ -1079,7 +1082,7 @@ STREET_NL_RE = re.compile(
     rf"|[{_STREET_UP}][{_STREET_LOW}]*e{_STREET_SEP}{_NL_STREET_WORDS}"
     rf"|{_NL_STREET_WORDS}(?:{_STREET_SEP}{_NL_PARTICLE}){{1,2}}{_STREET_SEP}"
     rf"{_STREET_WORD}(?:{_STREET_GAP}{_STREET_WORD}){{0,3}}"
-    rf"){_STREET_SEP}{_HOUSE_NUMBER}",
+    rf"){_STREET_SEP}{_HOUSE_NR}",
     re.ASCII,
 )
 STREET_DE_RE = re.compile(
@@ -1088,14 +1091,15 @@ STREET_DE_RE = re.compile(
     rf"|[{_STREET_UP}][{_STREET_LOW}]{{2,}}ring"
     rf"|[{_STREET_UP}][{_STREET_LOW}]*er{_STREET_SEP}{_DE_STREET_WORDS}"
     rf"|[{_STREET_UP}][{_STREET_LOW}]+-{_DE_STREET_WORDS}"
-    rf"){_STREET_SEP}|[{_STREET_UP}][{_STREET_LOW}]*str\.){_HOUSE_NUMBER}",
+    rf"){_STREET_SEP}|[{_STREET_UP}][{_STREET_LOW}]*str\.){_HOUSE_NR}",
     re.ASCII,
 )
 STREET_EN_RE = re.compile(
     rf"\b[1-9][0-9]{{0,4}}(?:[-/][0-9]{{1,4}})?[A-Za-z]?{_STREET_SEP}"
     rf"(?:{_STREET_WORD}{_STREET_SEP}){{1,3}}"
-    r"(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent"
-    r"|Terrace|Square|St|Rd|Ave|Ln|Blvd)\b\.?",
+    r"(?:(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent"
+    r"|Terrace|Square|Highway|Parkway|Row|Loop)\b"
+    r"|(?:St|Rd|Ave|Ln|Blvd|Dr|Ct|Pl|Hwy|Pkwy)\b\.?)",
     re.ASCII,
 )
 

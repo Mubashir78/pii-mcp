@@ -56,15 +56,16 @@
  *   van Meerdervoort 52``); ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/…
  *   or an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
  *   (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
- *   words, then ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up
- *   to three capitalized words before the street word are taken with it. A
- *   bare street name without a number is not flagged. Recall comes first: a
- *   word that ends in a street suffix is masked with its number (``Keypad 3``,
- *   ``Supermarkt 24``). Up to three spaces, tabs, or no-break spaces separate
- *   street and number. German function words that end in ``-er`` (``Der``,
- *   ``Hier``, ``Oder``, …) do not start a DE match. House numbers may carry up
- *   to three letters and a range (``12bis``, ``221-223``). ``\b`` is ASCII in
- *   every backend.
+ *   words, then ``Street``/``Road``/``Avenue``/… or an abbreviation with an
+ *   optional dot (``221B Baker Street``, ``5 Elm Ct.``). Up to three
+ *   capitalized words before the street word are taken with it. A bare street
+ *   name without a number is not flagged. Recall comes first: a word that ends
+ *   in a street suffix is masked with its number (``Keypad 3``, ``Supermarkt
+ *   24``). Up to three spaces, tabs, or no-break spaces separate street and
+ *   number. German function words that end in ``-er`` (``Der``, ``Hier``,
+ *   ``Oder``, …) do not start a DE match. House numbers may carry up to three
+ *   letters and a range (``12bis``, ``221-223``), after an optional
+ *   ``Nr.``/``no`` in ``nl`` and ``de``. ``\b`` is ASCII in every backend.
  * - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
  *   insensitive), with SA/SD/SS letter-pair rejects.
  * - Phone packs: international (any active pack; a ``(0)`` trunk may sit
@@ -1134,6 +1135,7 @@ const STREET_WORD = `[${STREET_UP}][${STREET_LOW}]+`;
 const STREET_SEP = String.raw`[ \t\u00a0\u202f]{1,3}`;
 const STREET_GAP = `(?:${STREET_SEP}|-)`;
 const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b`;
+const HOUSE_NR = String.raw`(?:(?:[Nn]r|[Nn]o)\.?` + `${STREET_SEP})?${HOUSE_NUMBER}`;
 const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)`;
 
 const NL_STREET_WORDS =
@@ -1147,7 +1149,7 @@ const STREET_NL_RE = new RegExp(
     `|[${STREET_UP}][${STREET_LOW}]*e${STREET_SEP}${NL_STREET_WORDS}` +
     `|${NL_STREET_WORDS}(?:${STREET_SEP}${NL_PARTICLE}){1,2}${STREET_SEP}` +
     `${STREET_WORD}(?:${STREET_GAP}${STREET_WORD}){0,3}` +
-    `)${STREET_SEP}${HOUSE_NUMBER}`,
+    `)${STREET_SEP}${HOUSE_NR}`,
   "g",
 );
 const STREET_DE_RE = new RegExp(
@@ -1156,13 +1158,13 @@ const STREET_DE_RE = new RegExp(
     `|[${STREET_UP}][${STREET_LOW}]{2,}ring` +
     `|[${STREET_UP}][${STREET_LOW}]*er${STREET_SEP}${DE_STREET_WORDS}` +
     `|[${STREET_UP}][${STREET_LOW}]+-${DE_STREET_WORDS}` +
-    `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NUMBER}`,
+    `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NR}`,
   "g",
 );
 const STREET_EN_RE = new RegExp(
   String.raw`\b[1-9][0-9]{0,4}(?:[-/][0-9]{1,4})?[A-Za-z]?` +
     `${STREET_SEP}(?:${STREET_WORD}${STREET_SEP}){1,3}` +
-    String.raw`(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)\b\.?`,
+    String.raw`(?:(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|Highway|Parkway|Row|Loop)\b|(?:St|Rd|Ave|Ln|Blvd|Dr|Ct|Pl|Hwy|Pkwy)\b\.?)`,
   "g",
 );
 
