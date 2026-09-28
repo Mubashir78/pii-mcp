@@ -1730,11 +1730,14 @@ fn street_res() -> &'static [Regex; 3] {
         let word = format!("[{STREET_UP}][{STREET_LOW}]+");
         let sep = r"[ \t\u00a0\u202f]{1,3}";
         let gap = format!("(?:{sep}|-)");
+        let nl_words =
+            "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
+        let particle = "(?:van|der|de|den|het|ten|ter|op|aan)";
         let nl = format!(
-            r"(?:{word}{gap}){{0,3}}[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal){sep}{HOUSE_NUMBER}"
+            r"(?:{word}{gap}){{0,3}}(?:[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)|[{STREET_UP}][{STREET_LOW}]*e{sep}{nl_words}|{nl_words}(?:{sep}{particle}){{1,2}}{sep}{word}(?:{gap}{word}){{0,3}}){sep}{HOUSE_NUMBER}"
         );
         let de = format!(
-            r"(?:{word}{gap}){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm|ufer)|[{STREET_UP}][{STREET_LOW}]*er{sep}{DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){HOUSE_NUMBER}"
+            r"(?:{word}{gap}){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm|ufer)|[{STREET_UP}][{STREET_LOW}]{{2,}}ring|[{STREET_UP}][{STREET_LOW}]*er{sep}{DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){HOUSE_NUMBER}"
         );
         let en = format!(
             r"(?-u:\b)[1-9][0-9]{{0,4}}(?:[-/][0-9]{{1,4}})?[A-Za-z]?{sep}(?:{word}{sep}){{1,3}}(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|St|Rd|Ave|Ln|Blvd)(?-u:\b)\.?"

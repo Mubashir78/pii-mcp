@@ -51,7 +51,9 @@
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
  * - Street address (``address``): street name + house number per pack. ``nl``:
  *   a capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then
- *   the number (``Kerkstraat 12``); ``de``: ``-straße``/``-str.``/``-weg``/…
+ *   the number (``Kerkstraat 12``), an ``-e`` adjective before
+ *   ``Markt``/``Gracht``/… (``Grote Markt 1``), or ``Laan van`` + name (``Laan
+ *   van Meerdervoort 52``); ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/…
  *   or an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
  *   (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
  *   words, then ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up
@@ -1134,15 +1136,24 @@ const STREET_GAP = `(?:${STREET_SEP}|-)`;
 const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b`;
 const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)`;
 
+const NL_STREET_WORDS =
+  "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
+const NL_PARTICLE = "(?:van|der|de|den|het|ten|ter|op|aan)";
+
 const STREET_NL_RE = new RegExp(
-  `(?:${STREET_WORD}${STREET_GAP}){0,3}[${STREET_UP}][${STREET_LOW}]*` +
+  `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:` +
+    `[${STREET_UP}][${STREET_LOW}]*` +
     "(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)" +
-    `${STREET_SEP}${HOUSE_NUMBER}`,
+    `|[${STREET_UP}][${STREET_LOW}]*e${STREET_SEP}${NL_STREET_WORDS}` +
+    `|${NL_STREET_WORDS}(?:${STREET_SEP}${NL_PARTICLE}){1,2}${STREET_SEP}` +
+    `${STREET_WORD}(?:${STREET_GAP}${STREET_WORD}){0,3}` +
+    `)${STREET_SEP}${HOUSE_NUMBER}`,
   "g",
 );
 const STREET_DE_RE = new RegExp(
   `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:(?:` +
     `[${STREET_UP}][${STREET_LOW}]*(?:straße|strasse|str\\b\\.?|weg|allee|platz|gasse|damm|ufer)` +
+    `|[${STREET_UP}][${STREET_LOW}]{2,}ring` +
     `|[${STREET_UP}][${STREET_LOW}]*er${STREET_SEP}${DE_STREET_WORDS}` +
     `|[${STREET_UP}][${STREET_LOW}]+-${DE_STREET_WORDS}` +
     `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NUMBER}`,
