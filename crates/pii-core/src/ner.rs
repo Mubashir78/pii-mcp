@@ -19,6 +19,7 @@
 //! Spans are widened to whole words, so a name split into sub-word tokens is
 //! masked whole.
 
+use crate::detectors::is_unspaced_script;
 use crate::scrub::{PiiScrubError, PII_TYPES};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{Linear, Module, VarBuilder};
@@ -62,9 +63,11 @@ fn load_dir(dir: &Path) -> Result<Ner, String> {
         format!("{MODEL_ENV}={}: {file}: {e}", dir.display())
     };
 
-    let raw = std::fs::read_to_string(dir.join("config.json")).map_err(|e| fail("config.json", &e))?;
+    let raw =
+        std::fs::read_to_string(dir.join("config.json")).map_err(|e| fail("config.json", &e))?;
     let config: Config = serde_json::from_str(&raw).map_err(|e| fail("config.json", &e))?;
-    let meta: serde_json::Value = serde_json::from_str(&raw).map_err(|e| fail("config.json", &e))?;
+    let meta: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| fail("config.json", &e))?;
     let id2label = meta["id2label"]
         .as_object()
         .ok_or_else(|| fail("config.json", &"no id2label"))?;
@@ -95,8 +98,8 @@ fn load_dir(dir: &Path) -> Result<Ner, String> {
     // while the process runs, the same contract as every candle model load.
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[&weights], DType::F32, &Device::Cpu) }
         .map_err(|e| fail("model.safetensors", &e))?;
-    let model =
-        XLMRobertaModel::new(&config, vb.pp("roberta")).map_err(|e| fail("model.safetensors", &e))?;
+    let model = XLMRobertaModel::new(&config, vb.pp("roberta"))
+        .map_err(|e| fail("model.safetensors", &e))?;
     let classifier = candle_nn::linear(config.hidden_size, id2label.len(), vb.pp("classifier"))
         .map_err(|e| fail("model.safetensors", &e))?;
 
@@ -145,7 +148,9 @@ impl Ner {
         let input = Tensor::from_vec(input, (1, n), &Device::Cpu)?;
         let mask = Tensor::ones((1, n), DType::U32, &Device::Cpu)?;
         let types = Tensor::zeros((1, n), DType::U32, &Device::Cpu)?;
-        let hidden = self.model.forward(&input, &mask, &types, None, None, None)?;
+        let hidden = self
+            .model
+            .forward(&input, &mask, &types, None, None, None)?;
         let logits = self.classifier.forward(&hidden)?;
         let probs: Vec<Vec<f32>> = candle_nn::ops::softmax_last_dim(&logits)?
             .squeeze(0)?
@@ -188,7 +193,11 @@ fn decide(probs: &[(f32, f32)], threshold: f32) -> Vec<Option<bool>> {
     let mut out: Vec<Option<bool>> = Vec::with_capacity(probs.len());
     for &(b, i) in probs {
         let after_person = out.last().is_some_and(Option::is_some);
-        let bar = if after_person { CONTINUE.min(threshold) } else { threshold };
+        let bar = if after_person {
+            CONTINUE.min(threshold)
+        } else {
+            threshold
+        };
         out.push((b + i >= bar).then_some(b >= i && !after_person));
     }
     out
@@ -202,7 +211,9 @@ fn placeholder_re() -> &'static Regex {
     })
 }
 
-/// Drop whitespace around a token, then grow it to whole words.
+/// Drop whitespace around a token, then grow it to whole words. Scripts
+/// written without spaces (CJK, Thai, …) have no word edge to grow to, so the
+/// token stays as tagged there.
 fn widen(text: &str, start: usize, end: usize) -> (usize, usize) {
     let token = &text[start..end];
     let start = start + (token.len() - token.trim_start().len());
@@ -212,7 +223,7 @@ fn widen(text: &str, start: usize, end: usize) -> (usize, usize) {
     }
     let word_len = |chars: &mut dyn Iterator<Item = char>| -> usize {
         chars
-            .take_while(|c| c.is_alphanumeric())
+            .take_while(|&c| c.is_alphanumeric() && !is_unspaced_script(c))
             .map(char::len_utf8)
             .sum()
     };
@@ -224,7 +235,8 @@ fn widen(text: &str, start: usize, end: usize) -> (usize, usize) {
 
 /// Byte spans of person names in `text`, merged and outside placeholders.
 fn person_spans(ner: &Ner, text: &str) -> Result<Vec<(usize, usize)>, PiiScrubError> {
-    let model_text = placeholder_re().replace_all(text, |c: &regex::Captures| " ".repeat(c[0].len()));
+    let model_text =
+        placeholder_re().replace_all(text, |c: &regex::Captures| " ".repeat(c[0].len()));
     let encoding = ner
         .tokenizer
         .encode(model_text.as_ref(), false)
@@ -266,7 +278,10 @@ fn cut_placeholders(text: &str, spans: &[(usize, usize)]) -> Vec<(usize, usize)>
     };
     for &(start, end) in spans {
         let mut cursor = start;
-        for &(ps, pe) in placeholders.iter().filter(|&&(ps, pe)| ps < end && start < pe) {
+        for &(ps, pe) in placeholders
+            .iter()
+            .filter(|&&(ps, pe)| ps < end && start < pe)
+        {
             keep(cursor, ps.max(cursor));
             cursor = cursor.max(pe);
         }
@@ -303,7 +318,10 @@ mod tests {
     #[test]
     fn missing_model_dir_names_the_file() {
         let err = load_dir(Path::new("/nonexistent/ner-model")).err().unwrap();
-        assert!(err.contains("PII_MCP_NER_MODEL=/nonexistent/ner-model: config.json"), "{err}");
+        assert!(
+            err.contains("PII_MCP_NER_MODEL=/nonexistent/ner-model: config.json"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -331,7 +349,13 @@ mod tests {
 
     #[test]
     fn low_scored_surname_joins_the_name_before_it() {
-        let probs = [(0.94, 0.0), (0.49, 0.36), (0.0, 0.32), (0.0, 0.66), (0.0, 0.1)];
+        let probs = [
+            (0.94, 0.0),
+            (0.49, 0.36),
+            (0.0, 0.32),
+            (0.0, 0.66),
+            (0.0, 0.1),
+        ];
         assert_eq!(
             decide(&probs, 0.9),
             vec![Some(true), Some(false), Some(false), Some(false), None]
@@ -345,5 +369,9 @@ mod tests {
         let text = "hi Lovelace, bye";
         assert_eq!(widen(text, 2, 7), (3, 11));
         assert_eq!(widen(text, 2, 3), (3, 3));
+        let cjk = "见到了王小明，他";
+        let wang = cjk.find('王').unwrap();
+        let ming = cjk.find('，').unwrap();
+        assert_eq!(widen(cjk, wang, ming), (wang, ming));
     }
 }
