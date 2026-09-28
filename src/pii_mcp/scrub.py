@@ -234,8 +234,8 @@ def _payload_string_bytes(value: Any, depth: int = 0) -> int:
 
 
 _NER_UNAVAILABLE = (
-    "ner=True needs the native backend built with the ner feature "
-    "(maturin develop --release --features ner)"
+    "NER needs a native build with the `ner` feature "
+    "(maturin develop --release --features ner); the pure Python backend has none"
 )
 
 

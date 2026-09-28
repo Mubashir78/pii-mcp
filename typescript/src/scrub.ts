@@ -48,8 +48,8 @@ export type ScrubOptions = {
 };
 
 const NER_UNAVAILABLE =
-  "ner: true needs the native backend built with the ner feature " +
-  "(npm run build:native -- --features ner)";
+  "NER needs a native build with the `ner` feature " +
+  "(npm run build:native -- --features ner); the pure TypeScript backend has none";
 
 function normalizeCounts(raw: NativeCounts): PiiCounts {
   const counts = emptyPiiCounts();

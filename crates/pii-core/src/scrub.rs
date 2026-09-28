@@ -134,7 +134,9 @@ fn require_ner() -> Result<(), PiiScrubError> {
     return crate::ner::ensure_loaded();
     #[cfg(not(feature = "ner"))]
     Err(PiiScrubError::new(
-        "ner=true needs pii-core built with the `ner` feature",
+        "NER needs a native build with the `ner` feature \
+         (maturin develop --release --features ner, or \
+         npm run build:native -- --features ner)",
     ))
 }
 
@@ -481,6 +483,11 @@ mod tests {
     fn ner_without_feature_is_an_error() {
         let err = scrub_text("Ada Lovelace", None, true, true).unwrap_err();
         assert!(err.to_string().contains("`ner` feature"));
+    }
+
+    #[cfg(all(feature = "payload", not(feature = "ner")))]
+    #[test]
+    fn ner_payload_without_feature_is_an_error() {
         let err = scrub_payload(serde_json::json!([]), None, true).unwrap_err();
         assert!(err.to_string().contains("`ner` feature"));
     }

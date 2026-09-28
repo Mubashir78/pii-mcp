@@ -36,6 +36,9 @@ def test_force_native_without_extension_raises(
         using_native()
 
 
+_NER_UNAVAILABLE = r"`ner` feature|PII_MCP_NER_MODEL"
+
+
 @pytest.mark.parametrize("backend", ["python", "native"])
 def test_ner_unavailable_raises(
     monkeypatch: pytest.MonkeyPatch, backend: str
@@ -46,9 +49,9 @@ def test_ner_unavailable_raises(
         pytest.skip("the model loads once per process; covered by the success test")
     monkeypatch.setenv("PII_MCP_BACKEND", backend)
     monkeypatch.delenv("PII_MCP_NER_MODEL", raising=False)
-    with pytest.raises(PiiScrubError, match="(?i)ner"):
+    with pytest.raises(PiiScrubError, match=_NER_UNAVAILABLE):
         scrub_text("Ada Lovelace", ner=True)
-    with pytest.raises(PiiScrubError, match="(?i)ner"):
+    with pytest.raises(PiiScrubError, match=_NER_UNAVAILABLE):
         scrub_payload({"to": "Ada Lovelace"}, ner=True)
 
 
