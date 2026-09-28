@@ -286,6 +286,12 @@ describe("scrubText", () => {
     ["Laan van Meerdervoort 52", "nl", "[ADDRESS]"],
     ["Laan van Nieuw Oost-Indië 5", "nl", "[ADDRESS]"],
     ["Hohenzollernring 12", "de", "[ADDRESS]"],
+    ["Kerkstraat nr. 12", "nl", "[ADDRESS]"],
+    ["Hauptstraße Nr. 5", "de", "[ADDRESS]"],
+    ["123 Main Dr", "en", "[ADDRESS]"],
+    ["5 Elm Ct.", "en", "[ADDRESS]"],
+    ["12 Park Row", "en", "[ADDRESS]"],
+    ["lives at 221B Baker Street.", "en", "lives at [ADDRESS]."],
   ])("masks street address %j (%s)", (text, lang, expected) => {
     const result = scrubText(text, { languages: [lang] });
     expect(result.text).toBe(expected);
@@ -656,7 +662,7 @@ describe("native backend", () => {
 
   it.skipIf(!process.env.PII_MCP_NER_MODEL)(
     "masks person names with ner on a ner build",
-    () => {
+    (ctx) => {
       process.env.PII_MCP_BACKEND = "native";
       resetNativeCache();
       let result;
@@ -664,7 +670,7 @@ describe("native backend", () => {
         result = scrubText("Mail Ada Lovelace at ada@example.com", { ner: true });
       } catch (err) {
         if (err instanceof PiiScrubError && err.message.includes("`ner` feature")) {
-          return;
+          ctx.skip();
         }
         throw err;
       }
