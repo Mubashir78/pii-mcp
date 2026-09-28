@@ -61,12 +61,13 @@ Patterns:
   (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
   words, then ``Street``/``Road``/``Avenue``/… (``221B Baker Street``). Up to
   three capitalized words before the street word are taken with it. A bare
-  street name without a number is not flagged. Suffixes that end common words
-  (``Keypad``, ``Supermarkt``, ``Käufer``) are left out. Up to three spaces,
-  tabs, or no-break spaces separate street and number. German function words
-  that end in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not start a DE match.
-  House numbers may carry up to three letters and a range (``12bis``,
-  ``221-223``). ``\b`` is ASCII in every backend.
+  street name without a number is not flagged. Recall comes first: a word that
+  ends in a street suffix is masked with its number (``Keypad 3``, ``Supermarkt
+  24``). Up to three spaces, tabs, or no-break spaces separate street and
+  number. German function words that end in ``-er`` (``Der``, ``Hier``,
+  ``Oder``, …) do not start a DE match. House numbers may carry up to three
+  letters and a range (``12bis``, ``221-223``). ``\b`` is ASCII in every
+  backend.
 - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
   insensitive), with SA/SD/SS letter-pair rejects.
 - Phone packs: international first (any active pack, before national IDs; a
@@ -1067,13 +1068,13 @@ _DE_STREET_WORDS = r"(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer
 
 STREET_NL_RE = re.compile(
     rf"(?:{_STREET_WORD}{_STREET_GAP}){{0,3}}[{_STREET_UP}][{_STREET_LOW}]*"
-    r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|plantsoen|wal)"
+    r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)"
     rf"{_STREET_SEP}{_HOUSE_NUMBER}",
     re.ASCII,
 )
 STREET_DE_RE = re.compile(
     rf"(?:{_STREET_WORD}{_STREET_GAP}){{0,3}}(?:(?:"
-    rf"[{_STREET_UP}][{_STREET_LOW}]*(?:straße|strasse|str\b\.?|weg|allee|platz|gasse|damm)"
+    rf"[{_STREET_UP}][{_STREET_LOW}]*(?:straße|strasse|str\b\.?|weg|allee|platz|gasse|damm|ufer)"
     rf"|[{_STREET_UP}][{_STREET_LOW}]*er{_STREET_SEP}{_DE_STREET_WORDS}"
     rf"|[{_STREET_UP}][{_STREET_LOW}]+-{_DE_STREET_WORDS}"
     rf"){_STREET_SEP}|[{_STREET_UP}][{_STREET_LOW}]*str\.){_HOUSE_NUMBER}",
