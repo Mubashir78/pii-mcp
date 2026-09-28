@@ -50,8 +50,9 @@
  * - NL postcode (``address``): ``1234 AB`` / ``1234AB`` with uppercase letters
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
  * - Street address (``address``): street name + house number per pack. ``nl``:
- *   a capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then
- *   the number (``Kerkstraat 12``), an ``-e`` adjective before
+ *   a capitalized word ending in
+ *   ``straat``/``str.``/``laan``/``weg``/``gracht``/… then the number
+ *   (``Kerkstraat 12``), ``Grote``/``Oude``/``Nieuwe``/… before
  *   ``Markt``/``Gracht``/… (``Grote Markt 1``), or ``Laan van`` + name (``Laan
  *   van Meerdervoort 52``); ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/…
  *   or an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
@@ -1141,12 +1142,13 @@ const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|G
 const NL_STREET_WORDS =
   "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
 const NL_PARTICLE = "(?:van|der|de|den|het|ten|ter|op|aan)";
+const NL_ADJECTIVES = "(?:Grote|Kleine|Oude|Nieuwe|Korte|Lange|Hoge|Lage|Brede|Verlengde)";
 
 const STREET_NL_RE = new RegExp(
   `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:` +
     `[${STREET_UP}][${STREET_LOW}]*` +
-    "(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)" +
-    `|[${STREET_UP}][${STREET_LOW}]*e${STREET_SEP}${NL_STREET_WORDS}` +
+    String.raw`(?:straat|str\b\.?|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)` +
+    `|${NL_ADJECTIVES}${STREET_SEP}${NL_STREET_WORDS}` +
     `|${NL_STREET_WORDS}(?:${STREET_SEP}${NL_PARTICLE}){1,2}${STREET_SEP}` +
     `${STREET_WORD}(?:${STREET_GAP}${STREET_WORD}){0,3}` +
     `)${STREET_SEP}${HOUSE_NR}`,

@@ -181,7 +181,7 @@ const UNSPACED_RANGES: [(char, char); 13] = [
 /// Email local part (1–64 chars): Unicode letters / digits plus ``_.%+-``.
 const EMAIL_LOCAL: &str = r"[\p{L}\p{N}_.%+\-]{1,64}";
 
-fn is_unspaced_script(c: char) -> bool {
+pub(crate) fn is_unspaced_script(c: char) -> bool {
     UNSPACED_RANGES.iter().any(|&(lo, hi)| (lo..=hi).contains(&c))
 }
 
@@ -1719,6 +1719,8 @@ fn scrub_nl_postcode(text: &str) -> (Option<String>, u32) {
 const STREET_UP: &str = r"A-Z\u00c0-\u00d6\u00d8-\u00de";
 const STREET_LOW: &str = r"a-z\u00df-\u00f6\u00f8-\u017f";
 const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?(?-u:\b)";
+const NL_ADJECTIVES: &str =
+    "(?:Grote|Kleine|Oude|Nieuwe|Korte|Lange|Hoge|Lage|Brede|Verlengde)";
 const DE_STREET_WORDS: &str =
     r"(?:Straße|Strasse|Str(?-u:\b)\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)";
 
@@ -1735,7 +1737,7 @@ fn street_res() -> &'static [Regex; 3] {
             "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
         let particle = "(?:van|der|de|den|het|ten|ter|op|aan)";
         let nl = format!(
-            r"(?:{word}{gap}){{0,3}}(?:[{STREET_UP}][{STREET_LOW}]*(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)|[{STREET_UP}][{STREET_LOW}]*e{sep}{nl_words}|{nl_words}(?:{sep}{particle}){{1,2}}{sep}{word}(?:{gap}{word}){{0,3}}){sep}{house}"
+            r"(?:{word}{gap}){{0,3}}(?:[{STREET_UP}][{STREET_LOW}]*(?:straat|str(?-u:\b)\.?|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)|{NL_ADJECTIVES}{sep}{nl_words}|{nl_words}(?:{sep}{particle}){{1,2}}{sep}{word}(?:{gap}{word}){{0,3}}){sep}{house}"
         );
         let de = format!(
             r"(?:{word}{gap}){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm|ufer)|[{STREET_UP}][{STREET_LOW}]{{2,}}ring|[{STREET_UP}][{STREET_LOW}]*er{sep}{DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){house}"

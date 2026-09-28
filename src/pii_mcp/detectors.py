@@ -55,22 +55,22 @@ Patterns:
   with uppercase letters only and SA/SD/SS rejects — structured fragment, not
   street-address NER.
 - Street address (``address``): street name + house number per pack. ``nl``: a
-  capitalized word ending in ``straat``/``laan``/``weg``/``gracht``/… then the
-  number (``Kerkstraat 12``), an ``-e`` adjective before ``Markt``/``Gracht``/…
-  (``Grote Markt 1``), or ``Laan van`` + name (``Laan van Meerdervoort 52``);
-  ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/… or an ``-er`` adjective /
-  hyphen before ``Straße``/``Allee``/``Platz``/… (``Berliner Straße 17``,
-  ``Hauptstr.5``); ``en``: number, 1–3 capitalized words, then
-  ``Street``/``Road``/``Avenue``/… or an abbreviation with an optional dot
-  (``221B Baker Street``, ``5 Elm Ct.``). Up to three capitalized words before
-  the street word are taken with it. A bare street name without a number is not
-  flagged. Recall comes first: a word that ends in a street suffix is masked
-  with its number (``Keypad 3``, ``Supermarkt 24``). Up to three spaces, tabs,
-  or no-break spaces separate street and number. German function words that end
-  in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not start a DE match. House
-  numbers may carry up to three letters and a range (``12bis``, ``221-223``),
-  after an optional ``Nr.``/``no`` in ``nl`` and ``de``. ``\b`` is ASCII in
-  every backend.
+  capitalized word ending in ``straat``/``str.``/``laan``/``weg``/``gracht``/…
+  then the number (``Kerkstraat 12``), ``Grote``/``Oude``/``Nieuwe``/… before
+  ``Markt``/``Gracht``/… (``Grote Markt 1``), or ``Laan van`` + name (``Laan
+  van Meerdervoort 52``); ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/… or
+  an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
+  (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
+  words, then ``Street``/``Road``/``Avenue``/… or an abbreviation with an
+  optional dot (``221B Baker Street``, ``5 Elm Ct.``). Up to three capitalized
+  words before the street word are taken with it. A bare street name without a
+  number is not flagged. Recall comes first: a word that ends in a street
+  suffix is masked with its number (``Keypad 3``, ``Supermarkt 24``). Up to
+  three spaces, tabs, or no-break spaces separate street and number. German
+  function words that end in ``-er`` (``Der``, ``Hier``, ``Oder``, …) do not
+  start a DE match. House numbers may carry up to three letters and a range
+  (``12bis``, ``221-223``), after an optional ``Nr.``/``no`` in ``nl`` and
+  ``de``. ``\b`` is ASCII in every backend.
 - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
   insensitive), with SA/SD/SS letter-pair rejects.
 - Phone packs: international first (any active pack, before national IDs; a
@@ -1074,12 +1074,14 @@ _NL_STREET_WORDS = (
     r"(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)"
 )
 _NL_PARTICLE = r"(?:van|der|de|den|het|ten|ter|op|aan)"
+_NL_ADJECTIVES = r"(?:Grote|Kleine|Oude|Nieuwe|Korte|Lange|Hoge|Lage|Brede|Verlengde)"
 
 STREET_NL_RE = re.compile(
     rf"(?:{_STREET_WORD}{_STREET_GAP}){{0,3}}(?:"
     rf"[{_STREET_UP}][{_STREET_LOW}]*"
-    r"(?:straat|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)"
-    rf"|[{_STREET_UP}][{_STREET_LOW}]*e{_STREET_SEP}{_NL_STREET_WORDS}"
+    r"(?:straat|str\b\.?|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt"
+    r"|plantsoen|wal)"
+    rf"|{_NL_ADJECTIVES}{_STREET_SEP}{_NL_STREET_WORDS}"
     rf"|{_NL_STREET_WORDS}(?:{_STREET_SEP}{_NL_PARTICLE}){{1,2}}{_STREET_SEP}"
     rf"{_STREET_WORD}(?:{_STREET_GAP}{_STREET_WORD}){{0,3}}"
     rf"){_STREET_SEP}{_HOUSE_NR}",
