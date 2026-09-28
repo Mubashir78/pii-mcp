@@ -293,12 +293,12 @@ def _house_number(r: R) -> str:
 
 def street_nl(r: R) -> str:
     name = r.choice(["Kerk", "Molen", "Dorps", "Stations", "Van Baerle", "Prinsen", "Keizers", "Hoofd", "Sint-Jans", "Oranje"])
-    kind = r.choice(["straat", "laan", "weg", "gracht", "plein", "kade", "singel", "dijk", "steeg"])
+    kind = r.choice(["straat", "laan", "weg", "gracht", "plein", "kade", "singel", "dijk", "steeg", "markt", "hof", "pad"])
     return f"{name}{kind} {_house_number(r)}"
 
 
 def street_de(r: R) -> str:
-    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse'])}"
+    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse', 'ufer'])}"
     spaced = f"{r.choice(['Berliner', 'Frankfurter', 'Kölner', 'Neuer', 'Alter'])} {r.choice(['Straße', 'Str.', 'Allee', 'Weg', 'Ring'])}"
     return f"{r.choice([glued, glued, spaced])} {_house_number(r)}"
 
@@ -396,7 +396,6 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("coord_like", lambda r: f"scale {r.uniform(-1, 1):.4f}, {r.uniform(-1, 1):.4f}"),
     ("street_name", lambda r: r.choice(["Kerkstraat", "Baker Street", "Hauptstraße", "Frankfurter Allee", "de Prinsengracht", "Oxford Road"])),
     ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
-    ("suffix_word", lambda r: r.choice(["Use the Keypad 3 times", "Open Notepad 2 now", "Supermarkt 24 uur open", "Gerechtshof 2 oordeelde", "Der Käufer 2 zahlt"])),
     ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
 ]
@@ -407,6 +406,7 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
 AMBIGUOUS: list[tuple[str, Callable[[R], str]]] = [
     ("nine_digit_id", lambda r: f"invoice {r.randint(100_000_000, 999_999_999)}"),
     ("semver4", lambda r: f"{r.randint(1, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}"),
+    ("suffix_word", lambda r: r.choice(["Use the Keypad 3 times", "Open Notepad 2 now", "Supermarkt 24 uur open", "Gerechtshof 2 oordeelde", "Der Käufer 2 zahlt"])),
     ("street_word_phrase", lambda r: r.choice(["Chapter 12 Main Street", "In 2024 Times Square was busy", "I bought 2 Hard Drive units", "Parkplatz 12 ist frei"])),
     ("decimal_pair", lambda r: f"{r.uniform(2, 80):.4f}, {r.uniform(2, 80):.4f}"),
 ]

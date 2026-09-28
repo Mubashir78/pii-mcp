@@ -140,13 +140,14 @@ is fp32 only: candle's XLM-R implementation builds its attention mask in F32,
 so fp16 weights do not run.
 
 On the eval (`PII_MCP_NER_MODEL=<dir> python eval/score.py --ner`, EN/NL/DE
-names in 15 contexts), `person` scores recall 0.967 and precision 0.918. Most
+names in 15 contexts), `person` scores recall 0.967 and precision 0.930. Most
 false positives are company names such as `Albert Heijn`. The address
 generators only produce the street shapes the patterns support, so the
 address recall of 1.0 covers those shapes only; precision is measured with
-the `en`, `nl` and `de` packs against bare street names, company names, and
-words that end in a street suffix (`Keypad 3`, `Supermarkt 24`, `Der Käufer
-2`).
+the `en`, `nl` and `de` packs against bare street names and company names.
+Words that end in a street suffix and are followed by a number (`Keypad 3`,
+`Supermarkt 24`) are masked on purpose, since dropping those suffixes leaks
+real addresses such as `Nieuwmarkt 4`.
 
 ## Packages
 
