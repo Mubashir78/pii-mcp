@@ -1,3 +1,24 @@
+## [1.7.0](https://github.com/foro-sh/pii-mcp/compare/v1.6.0...v1.7.0) (2026-09-28)
+
+### Features
+
+* **detectors:** detect street and house number addresses ([a0e5fe4](https://github.com/foro-sh/pii-mcp/commit/a0e5fe43483fc693615d2789af2d4938e4a6bef8)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* expose ner option in the Python and TypeScript APIs ([786f134](https://github.com/foro-sh/pii-mcp/commit/786f13468c8adda643c6b601c8c6537c95bbcbe1)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **rust:** add optional ner feature for person names ([c60cdf9](https://github.com/foro-sh/pii-mcp/commit/c60cdf9eab7b593a0f89a77478dc811ba88b200a)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+
+### Bug Fixes
+
+* **detectors:** accept Nr. before house numbers and more EN street types ([719fbca](https://github.com/foro-sh/pii-mcp/commit/719fbcace3ad318bbb936654b0d163704703aced)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **detectors:** drop street suffixes that end common words ([f32e10f](https://github.com/foro-sh/pii-mcp/commit/f32e10f7e61ea612729a3582736427333931f198)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **detectors:** limit Dutch street adjectives and accept Kerkstr ([59a28c2](https://github.com/foro-sh/pii-mcp/commit/59a28c298a27d25cb9383277577de0fed6d5a08c)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **detectors:** match spaced and Laan-van Dutch streets and -ring ([5c694dc](https://github.com/foro-sh/pii-mcp/commit/5c694dc7c583e200339abe59cd1372bbdf7fe6cf)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **detectors:** restore the pad, hof, markt and ufer street suffixes ([e5559b8](https://github.com/foro-sh/pii-mcp/commit/e5559b8721f1d1fe96bd303a931a3abb987134ba)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **detectors:** skip German function words and widen street spacing ([0579400](https://github.com/foro-sh/pii-mcp/commit/05794006c1dd4ea0f17741cdcbb7d79ed80e5618)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* give one build hint when ner is unavailable ([955930e](https://github.com/foro-sh/pii-mcp/commit/955930eea4cc55dee2cdf72279b1b4fab22a9501)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **rust:** join low-scored surname tokens to the name before them ([aef7296](https://github.com/foro-sh/pii-mcp/commit/aef729636e72960953b4f07b8099e3be34b08b5f)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **rust:** keep names around placeholders in the NER pass ([d6a48aa](https://github.com/foro-sh/pii-mcp/commit/d6a48aacaad906cdd065a9a10dc80ee8775fbbcb)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+* **rust:** stop widening person spans into unspaced scripts ([34c2a4e](https://github.com/foro-sh/pii-mcp/commit/34c2a4e76d6511ba13de2fc4e9d376338109b108)), closes [#32](https://github.com/foro-sh/pii-mcp/issues/32)
+
 ## [1.6.0](https://github.com/foro-sh/pii-mcp/compare/v1.5.5...v1.6.0) (2026-09-27)
 
 ### Features
