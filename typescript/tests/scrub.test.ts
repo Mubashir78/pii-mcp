@@ -267,6 +267,11 @@ describe("scrubText", () => {
     ["Kölner Str. 5", "de", "[ADDRESS]"],
     ["Frankfurter Allee 12", "de", "[ADDRESS]"],
     ["Johann-Sebastian-Bach-Straße 5", "de", "[ADDRESS]"],
+    ["Kaiser-Wilhelm-Platz 3", "de", "[ADDRESS]"],
+    ["Hauptstr.5, Berlin", "de", "[ADDRESS], Berlin"],
+    ["Kerkstraat  12", "nl", "[ADDRESS]"],
+    ["Kerkstraat\t12", "nl", "[ADDRESS]"],
+    ["Kerkstraat\u202f12", "nl", "[ADDRESS]"],
   ])("masks street address %j (%s)", (text, lang, expected) => {
     const result = scrubText(text, { languages: [lang] });
     expect(result.text).toBe(expected);
@@ -282,6 +287,11 @@ describe("scrubText", () => {
     ["Auf Platz 3 landete", "de"],
     ["Spring 2024", "de"],
     ["3 new road maps", "en"],
+    ["Use the Keypad 3 times", "en"],
+    ["Open Notepad 2 now", "nl"],
+    ["Supermarkt 24 uur open", "nl"],
+    ["Gerechtshof 2 oordeelde", "nl"],
+    ["Der Käufer 2 zahlt", "de"],
   ])("leaves street lookalike %j (%s)", (text, lang) => {
     const result = scrubText(text, { languages: [lang] });
     expect(result.text).toBe(text);
@@ -623,20 +633,29 @@ describe("native backend", () => {
     }
   });
 
-  it("fails closed when ner is requested without a ner build or model", () => {
-    const saved = process.env.PII_MCP_NER_MODEL;
-    delete process.env.PII_MCP_NER_MODEL;
-    try {
+  it.skipIf(process.env.PII_MCP_NER_MODEL)(
+    "fails closed when ner is requested without a ner build or model",
+    () => {
       expect(() => scrubText("Ada Lovelace", { ner: true })).toThrow(PiiScrubError);
       expect(() => scrubPayload({ to: "Ada Lovelace" }, { ner: true })).toThrow(
         PiiScrubError,
       );
-    } finally {
-      if (saved !== undefined) {
-        process.env.PII_MCP_NER_MODEL = saved;
-      }
-    }
-  });
+    },
+  );
+
+  it.skipIf(!process.env.PII_MCP_NER_MODEL)(
+    "masks person names with ner on a ner build",
+    () => {
+      process.env.PII_MCP_BACKEND = "native";
+      resetNativeCache();
+      const result = scrubText("Mail Ada Lovelace at ada@example.com", { ner: true });
+      expect(result.text).toBe("Mail [PERSON] at [EMAIL]");
+      expect(result.counts.person).toBe(1);
+      expect(result.counts.email).toBe(1);
+      const payload = scrubPayload({ to: ["Jan de Vries"] }, { ner: true });
+      expect(payload.payload).toEqual({ to: ["[PERSON]"] });
+    },
+  );
 
   it("forces js backend even when native is present", () => {
     process.env.PII_MCP_BACKEND = "js";
