@@ -58,6 +58,9 @@ git worktree add .worktrees/<branch> -b <branch> origin/main
 - Smoke the baseline for the areas you will touch (section 3 lists the
   commands). A failure on untouched `origin/main` → record it, work around it,
   and mention it in the PR. Do not fix unrelated breakage in this PR.
+- Detector work: before changing anything, run
+  `python eval/score.py --save-baseline` (the perf gate is silently skipped
+  without it), then `python eval/score.py` and record the loss to beat.
 
 ## 3. Implement and commit (no commit ask)
 
@@ -68,10 +71,10 @@ git worktree add .worktrees/<branch> -b <branch> origin/main
   commit that passes its checks on its own. Never `--no-verify`. Never commit
   to or force-push `main`. End each message with the `Co-Authored-By` trailer
   your harness specifies, if any.
-- The commit type drives the release (semantic-release, 0.x line): `feat` →
-  minor, `fix`/`perf` → patch, `docs`/`chore`/`test`/`refactor`/`ci` → none.
-  Pick the type that reflects real user impact. Never edit the version or
-  `CHANGELOG.md`.
+- The commit type drives the release (semantic-release): `feat` → minor,
+  `fix`/`perf` → patch, `docs`/`chore`/`test`/`refactor`/`ci` → none. A
+  breaking change bumps only the minor (`.releaserc.json`). Pick the type
+  that reflects real user impact. Never edit the version or `CHANGELOG.md`.
 - Don't write comments unless they are really necessary. Code should explain
   itself; add a comment only when the code would not make sense without it.
   API contracts go in docstrings, not `#` comments (`.cursor/rules/`).
@@ -83,15 +86,18 @@ git worktree add .worktrees/<branch> -b <branch> origin/main
   test to get green.
 - The detectors exist in three backends: Python (`src/pii_mcp/`), Rust
   (`crates/`), TypeScript (`typescript/`). A behavior change in one must land
-  in all of them, unless the issue says otherwise.
+  in all of them, unless the issue says otherwise. Detector order and
+  language packs (`_detectors_for` in `scrub.py`) must match too.
+- New or changed detector or pack → update the README coverage table and
+  examples.
 - Before leaving this step, every check for every touched area passes:
 
   | Touched | Run |
   |---|---|
   | anything | `pytest -q` |
-  | `src/pii_mcp/detectors.py` or `scrub.py` | `python eval/score.py` on the branch and on `origin/main`: gates pass and loss does not rise |
-  | `crates/` | `cargo test -p pii-core`; `uv pip install maturin && maturin develop --release`; `PII_MCP_BACKEND=native pytest -q -o pythonpath=`; `python eval/parity.py` |
-  | `typescript/` | in `typescript/`: `npm run build && npm run build:native && PII_MCP_BACKEND=js npm test && PII_MCP_BACKEND=native npm test` |
+  | `src/pii_mcp/detectors.py` or `scrub.py` | `python eval/score.py`: all gates pass and loss is not above the section 2 baseline |
+  | `crates/` | `cargo test -p pii-core`; `uv pip install -e ".[dev,native]" && maturin develop --release`; `PII_MCP_BACKEND=native pytest -q`; `python eval/parity.py` |
+  | `typescript/` | in `typescript/`: `npm run typecheck && npm run build && npm run build:native && PII_MCP_BACKEND=js npm test && PII_MCP_BACKEND=native npm test` |
 
   Runtime-visible change (MCP tool output, scrub result) → exercise it once
   for real, e.g. a short `python -c` against the public API, and keep the
@@ -121,9 +127,10 @@ Repeat, at most **5 rounds**:
      > or fluff in docs and messages, tautological or weakened tests,
      > missing tests, commit messages that break the Conventional Commits
      > rules or carry the wrong release type, and parts of the issue left
-     > undone. Run the tests yourself if it helps. Do not edit files. Return
-     > findings as `severity | file:line | problem | concrete failure
-     > scenario`, severity one of `blocker`, `should-fix`, `nit`. No praise.
+     > undone, including README coverage table updates. Run the tests
+     > yourself if it helps. Do not edit files. Return findings as
+     > `severity | file:line | problem | concrete failure scenario`,
+     > severity one of `blocker`, `should-fix`, `nit`. No praise.
      > Nothing found → say `NO FINDINGS`.
 2. **Triage every finding.** Verify it against the code yourself.
    - Real → fix it, add or adjust a test, commit (`fix(scope): ...`).
