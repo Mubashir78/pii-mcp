@@ -1,6 +1,7 @@
 # pii-mcp
 
-Pattern-based PII scrubbing for MCP servers (regex + checksums). Masks emails,
+Pattern-based PII scrubbing for MCP servers (regex + checksums), with an
+optional NER pass for person names in the Rust backend. Masks emails,
 IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax
 IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number addresses, Dutch
 postcodes, and Dutch license plates in tool results. Language packs: `en`,
@@ -59,7 +60,8 @@ scrub_payload({"email": "ada@example.com"}, languages=["en"])
 
 Aligned with
 [AP: wat zijn persoonsgegevens](https://www.autoriteitpersoonsgegevens.nl/themas/basis-avg/privacy-en-persoonsgegevens/wat-zijn-persoonsgegevens)
-where pattern/checksum detection can reach them. Names, free-text health data
+where pattern/checksum detection can reach them. Person names need the
+opt-in NER build ([below](#person-names-optional-ner)). Free-text health data
 (allergies), photos/audio/video, and unstructured klant-/personeelsnummers
 stay out of scope.
 
@@ -75,7 +77,66 @@ stay out of scope.
 | Online / device IDs                           | `mac`, `imei`                          | IMEI: grouped forms + Luhn    |
 | Adres                                         | `address`                              | Street + number; NL postcode  |
 | Kenteken                                      | `license_plate`                        | nl pack                       |
-| Naam, pasfoto, allergieën, koopgedrag, camera |                                        | NER / media                   |
+| Naam                                          | `person`                               | Opt-in NER build only         |
+| Pasfoto, allergieën, koopgedrag, camera       |                                        | Media / free text             |
+
+## Person names (optional NER)
+
+`ner=True` runs an XLM-R token classifier
+([`Davlan/xlm-roberta-base-ner-hrl`](https://huggingface.co/Davlan/xlm-roberta-base-ner-hrl),
+AFL-3.0; EN/NL/DE among its languages) after the pattern detectors and masks
+person names as `[PERSON]`. It runs in the Rust core on
+[candle](https://github.com/huggingface/candle) (CPU, fp32) and is off by
+default: published wheels and the npm package are built without it, and no
+weights ship with any package.
+
+Build with the `ner` feature:
+
+```bash
+maturin develop --release --features ner                  # Python
+(cd typescript && npm run build:native -- --features ner) # Node
+cargo build -p pii-core --features ner                    # Rust
+```
+
+Download the pinned weights (1.1 GB) and the matching XLM-R tokenizer (MIT)
+into one directory, and point `PII_MCP_NER_MODEL` at it:
+
+```bash
+mkdir -p ner-model && cd ner-model
+M=https://huggingface.co/Davlan/xlm-roberta-base-ner-hrl/resolve/253f557bd8249b8515114cfd7f71974fe5fa4d2f
+T=https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+curl -fL -O "$M/config.json" -O "$M/model.safetensors" -O "$T/tokenizer.json"
+export PII_MCP_NER_MODEL="$PWD"
+```
+
+```python
+scrub_text("Mail Ada Lovelace at ada@example.com", ner=True)
+# {'text': 'Mail [PERSON] at [EMAIL]', ...}
+```
+
+- Pattern hits are masked first; the NER pass never re-tags a placeholder, so
+  nothing is counted twice.
+- `PII_MCP_NER_THRESHOLD` (default `0.9`) is the minimum person probability
+  per token.
+- `ner=True` raises `PiiScrubError` when the build has no `ner` feature, the
+  backend is pure Python / TypeScript, or the model directory is missing or
+  invalid. Text is never returned with the NER pass silently skipped.
+
+Cost on macOS arm64 (M4 Pro), `scripts/bench_backends.py` with
+`PII_MCP_NER_MODEL` set:
+
+| Case               | Regex only | `ner=True` |
+| ------------------ | ---------- | ---------- |
+| Short mixed PII    | 0.028 ms   | 67 ms      |
+| 2 KiB tool result  | 0.22 ms    | 532 ms     |
+| 16 KiB tool result | 2.3 ms     | 4.6 s      |
+
+Model load takes 2.0 s once per process; peak RSS is about 2.4 GB.
+
+On the eval (`PII_MCP_NER_MODEL=<dir> python eval/score.py --ner`, EN/NL/DE
+names in 15 contexts), `person` scores recall 0.967 and precision 0.930. Most
+false positives are company names such as `Albert Heijn`. Street addresses
+score 1.0 / 1.0 in both modes.
 
 ## Packages
 
