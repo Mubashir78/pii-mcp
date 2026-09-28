@@ -6,8 +6,11 @@
 //! `tokenizer.json` and `model.safetensors`. It is loaded once per process;
 //! a missing or invalid directory is an error, never a silent no-op.
 //!
-//! The pass runs on text the pattern detectors already masked. A span that
-//! touches a placeholder is dropped, so regex hits are never counted twice.
+//! The pass runs on text the pattern detectors already masked. The model
+//! sees placeholders as spaces of the same length (so offsets still match),
+//! and placeholders are cut out of person spans afterwards, so regex hits are
+//! never counted twice and the name parts around them are still masked. Truncation and padding
+//! settings in `tokenizer.json` are cleared, so no text is skipped.
 //! Long text is split into overlapping windows of the model's sequence
 //! length, and each token keeps the label from the window where it sits
 //! farthest from an edge. A token counts as a person when
@@ -72,8 +75,12 @@ fn load_dir(dir: &Path) -> Result<Ner, String> {
     };
     let (b_per, i_per) = (label("B-PER")?, label("I-PER")?);
 
-    let tokenizer =
+    let mut tokenizer =
         Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| fail("tokenizer.json", &e))?;
+    tokenizer
+        .with_truncation(None)
+        .map_err(|e| fail("tokenizer.json", &e))?
+        .with_padding(None);
     let special = |token: &str| {
         tokenizer
             .token_to_id(token)
@@ -204,9 +211,10 @@ fn widen(text: &str, start: usize, end: usize) -> (usize, usize) {
 
 /// Byte spans of person names in `text`, merged and outside placeholders.
 fn person_spans(ner: &Ner, text: &str) -> Result<Vec<(usize, usize)>, PiiScrubError> {
+    let model_text = placeholder_re().replace_all(text, |c: &regex::Captures| " ".repeat(c[0].len()));
     let encoding = ner
         .tokenizer
-        .encode(text, false)
+        .encode(model_text.as_ref(), false)
         .map_err(|e| PiiScrubError::new(format!("NER tokenization failed: {e}")))?;
     let labels = ner
         .labels(encoding.get_ids())
@@ -227,12 +235,31 @@ fn person_spans(ner: &Ner, text: &str) -> Result<Vec<(usize, usize)>, PiiScrubEr
             _ => spans.push((start, end)),
         }
     }
+    Ok(cut_placeholders(text, &spans))
+}
+
+/// Remove placeholder ranges from `spans`, keeping each remaining piece that
+/// holds a letter or digit.
+fn cut_placeholders(text: &str, spans: &[(usize, usize)]) -> Vec<(usize, usize)> {
     let placeholders: Vec<(usize, usize)> = placeholder_re()
         .find_iter(text)
         .map(|m| (m.start(), m.end()))
         .collect();
-    spans.retain(|&(s, e)| !placeholders.iter().any(|&(ps, pe)| s < pe && ps < e));
-    Ok(spans)
+    let mut out = Vec::new();
+    let mut keep = |start: usize, end: usize| {
+        if start < end && text[start..end].chars().any(char::is_alphanumeric) {
+            out.push(widen(text, start, end));
+        }
+    };
+    for &(start, end) in spans {
+        let mut cursor = start;
+        for &(ps, pe) in placeholders.iter().filter(|&&(ps, pe)| ps < end && start < pe) {
+            keep(cursor, ps.max(cursor));
+            cursor = cursor.max(pe);
+        }
+        keep(cursor, end);
+    }
+    out
 }
 
 /// Mask person names as `[PERSON]`. Same contract as a pattern detector.
@@ -280,6 +307,13 @@ mod tests {
         let err = load_dir(&dir).err().unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         assert!(err.ends_with("config.json: id2label has no B-PER"), "{err}");
+    }
+
+    #[test]
+    fn placeholders_are_cut_out_of_person_spans() {
+        let text = "Jan [EMAIL] de Vries, [PHONE]";
+        assert_eq!(cut_placeholders(text, &[(0, 20)]), vec![(0, 3), (12, 20)]);
+        assert_eq!(cut_placeholders(text, &[(22, 29)]), vec![]);
     }
 
     #[test]

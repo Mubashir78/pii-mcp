@@ -141,7 +141,7 @@ fn require_ner() -> Result<(), PiiScrubError> {
 /// Mask pattern-detectable PII in a string using an already-normalized language pack.
 ///
 /// With `ner`, a person-name pass runs last, on the already-masked text
-/// (see the `ner` module); the caller must have checked [`require_ner`].
+/// (see the `ner` module).
 pub fn scrub_text_langs(
     text: &str,
     langs: &[LanguageCode],
