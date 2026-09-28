@@ -3,7 +3,8 @@
     maturin develop --release && python eval/parity.py [n]
 
 Inputs splice generated PII, clean values, and random separator noise so
-boundary handling is exercised. Exit status 1 on any mismatch.
+boundary handling is exercised. Exit status 1 on any mismatch. Person names
+are left out: they need the NER pass, which only the native backend has.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ sys.path.insert(0, str(ROOT / "eval"))
 
 from generators import CLEAN, PII  # noqa: E402
 
+PATTERN_PII = [g for g in PII if g[0] != "person"]
+
 from pii_mcp import scrub as backend  # noqa: E402
 
 NOISE = "0123456789abcdefABx:.,;-/ @+()\n"
@@ -29,7 +32,7 @@ def sample(r: random.Random) -> str:
     for _ in range(r.randint(1, 4)):
         roll = r.random()
         if roll < 0.4:
-            parts.append(r.choice(PII)[1](r))
+            parts.append(r.choice(PATTERN_PII)[1](r))
         elif roll < 0.6:
             parts.append(r.choice(CLEAN)[1](r))
         else:

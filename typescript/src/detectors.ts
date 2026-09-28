@@ -49,6 +49,24 @@
  *   — national identificatienummer alongside BSN; format only, no check digit.
  * - NL postcode (``address``): ``1234 AB`` / ``1234AB`` with uppercase letters
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
+ * - Street address (``address``): street name + house number per pack. ``nl``:
+ *   a capitalized word ending in
+ *   ``straat``/``str.``/``laan``/``weg``/``gracht``/… then the number
+ *   (``Kerkstraat 12``), ``Grote``/``Oude``/``Nieuwe``/… before
+ *   ``Markt``/``Gracht``/… (``Grote Markt 1``), or ``Laan van`` + name (``Laan
+ *   van Meerdervoort 52``); ``de``: ``-straße``/``-str.``/``-weg``/``-ring``/…
+ *   or an ``-er`` adjective / hyphen before ``Straße``/``Allee``/``Platz``/…
+ *   (``Berliner Straße 17``, ``Hauptstr.5``); ``en``: number, 1–3 capitalized
+ *   words, then ``Street``/``Road``/``Avenue``/… or an abbreviation with an
+ *   optional dot (``221B Baker Street``, ``5 Elm Ct.``). Up to three
+ *   capitalized words before the street word are taken with it. A bare street
+ *   name without a number is not flagged. Recall comes first: a word that ends
+ *   in a street suffix is masked with its number (``Keypad 3``, ``Supermarkt
+ *   24``). Up to three spaces, tabs, or no-break spaces separate street and
+ *   number. German function words that end in ``-er`` (``Der``, ``Hier``,
+ *   ``Oder``, …) do not start a DE match. House numbers may carry up to three
+ *   letters and a range (``12bis``, ``221-223``), after an optional
+ *   ``Nr.``/``no`` in ``nl`` and ``de``. ``\b`` is ASCII in every backend.
  * - NL kenteken (``license_plate``): hyphenated RDW sidecodes 1–14 (case-
  *   insensitive), with SA/SD/SS letter-pair rejects.
  * - Phone packs: international (any active pack; a ``(0)`` trunk may sit
@@ -1111,6 +1129,67 @@ export const nlPostcodeDetector: Detector = {
   type: "address",
   scrub: scrubNlPostcode,
 };
+
+const STREET_UP = String.raw`A-Z\u00c0-\u00d6\u00d8-\u00de`;
+const STREET_LOW = String.raw`a-z\u00df-\u00f6\u00f8-\u017f`;
+const STREET_WORD = `[${STREET_UP}][${STREET_LOW}]+`;
+const STREET_SEP = String.raw`[ \t\u00a0\u202f]{1,3}`;
+const STREET_GAP = `(?:${STREET_SEP}|-)`;
+const HOUSE_NUMBER = String.raw`[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?\b`;
+const HOUSE_NR = String.raw`(?:(?:[Nn]r|[Nn]o)\.?` + `${STREET_SEP})?${HOUSE_NUMBER}`;
+const DE_STREET_WORDS = String.raw`(?:Straße|Strasse|Str\b\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)`;
+
+const NL_STREET_WORDS =
+  "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
+const NL_PARTICLE = "(?:van|der|de|den|het|ten|ter|op|aan)";
+const NL_ADJECTIVES = "(?:Grote|Kleine|Oude|Nieuwe|Korte|Lange|Hoge|Lage|Brede|Verlengde)";
+
+const STREET_NL_RE = new RegExp(
+  `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:` +
+    `[${STREET_UP}][${STREET_LOW}]*` +
+    String.raw`(?:straat|str\b\.?|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)` +
+    `|${NL_ADJECTIVES}${STREET_SEP}${NL_STREET_WORDS}` +
+    `|${NL_STREET_WORDS}(?:${STREET_SEP}${NL_PARTICLE}){1,2}${STREET_SEP}` +
+    `${STREET_WORD}(?:${STREET_GAP}${STREET_WORD}){0,3}` +
+    `)${STREET_SEP}${HOUSE_NR}`,
+  "g",
+);
+const STREET_DE_RE = new RegExp(
+  `(?:${STREET_WORD}${STREET_GAP}){0,3}(?:(?:` +
+    `[${STREET_UP}][${STREET_LOW}]*(?:straße|strasse|str\\b\\.?|weg|allee|platz|gasse|damm|ufer)` +
+    `|[${STREET_UP}][${STREET_LOW}]{2,}ring` +
+    `|[${STREET_UP}][${STREET_LOW}]*er${STREET_SEP}${DE_STREET_WORDS}` +
+    `|[${STREET_UP}][${STREET_LOW}]+-${DE_STREET_WORDS}` +
+    `)${STREET_SEP}|[${STREET_UP}][${STREET_LOW}]*str\\.)${HOUSE_NR}`,
+  "g",
+);
+const STREET_EN_RE = new RegExp(
+  String.raw`\b[1-9][0-9]{0,4}(?:[-/][0-9]{1,4})?[A-Za-z]?` +
+    `${STREET_SEP}(?:${STREET_WORD}${STREET_SEP}){1,3}` +
+    String.raw`(?:(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|Highway|Parkway|Row|Loop)\b|(?:St|Rd|Ave|Ln|Blvd|Dr|Ct|Pl|Hwy|Pkwy)\b\.?)`,
+  "g",
+);
+
+const DE_FUNCTION_WORDS = new Set([
+  "Der", "Hier", "Oder", "Aber", "Wieder", "Jeder", "Jener", "Einer", "Keiner",
+  "Immer", "Unser", "Euer", "Weder", "Außer",
+]);
+
+function deStreetValid(value: string): boolean {
+  return !DE_FUNCTION_WORDS.has(value.split(/[\s-]/, 1)[0] ?? "");
+}
+
+function streetDetector(pattern: RegExp, isValid?: (value: string) => boolean): Detector {
+  return {
+    type: "address",
+    scrub: (text) =>
+      replaceMatches(text, pattern, "[ADDRESS]", isValid, isValid !== undefined),
+  };
+}
+
+export const streetNlDetector = streetDetector(STREET_NL_RE);
+export const streetDeDetector = streetDetector(STREET_DE_RE, deStreetValid);
+export const streetEnDetector = streetDetector(STREET_EN_RE);
 
 const NL_LICENSE_PLATE_RE =
   /(?<![\w-])(?:[A-Z]{2}-\d{2}-\d{2}|\d{2}-\d{2}-[A-Z]{2}|\d{2}-[A-Z]{2}-\d{2}|[A-Z]{2}-\d{2}-[A-Z]{2}|[A-Z]{2}-[A-Z]{2}-\d{2}|\d{2}-[A-Z]{2}-[A-Z]{2}|\d{2}-[A-Z]{3}-\d|\d-[A-Z]{3}-\d{2}|[A-Z]{2}-\d{3}-[A-Z]|[A-Z]-\d{3}-[A-Z]{2}|[A-Z]{3}-\d{2}-[A-Z]|[A-Z]-\d{2}-[A-Z]{3}|\d-[A-Z]{2}-\d{3}|\d{3}-[A-Z]{2}-\d)(?![\w-])/gi;

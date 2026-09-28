@@ -19,6 +19,10 @@ Artifacts per release:
 Pip prefers a matching platform wheel; otherwise it installs the pure wheel or
 sdist (no Rust toolchain required).
 
+Published wheels are built without the `ner` cargo feature, so they carry no
+candle or tokenizer code. NER builds are not published; users build them from
+source (see the README).
+
 ## What happens on merge
 
 `.github/workflows/release.yml` runs:

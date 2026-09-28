@@ -255,6 +255,77 @@ describe("scrubText", () => {
     );
   });
 
+  it.each([
+    ["woont op Kerkstraat 12, 1234 AB Amsterdam", "nl", "woont op [ADDRESS], [ADDRESS] Amsterdam"],
+    ["adres: Van Baerlestraat 12-3.", "nl", "adres: [ADDRESS]."],
+    ["Sint-Jansstraat 4a", "nl", "[ADDRESS]"],
+    ["ship to 221B Baker Street, London", "en", "ship to [ADDRESS], London"],
+    ["1600 Pennsylvania Avenue NW", "en", "[ADDRESS] NW"],
+    ["at 10 Downing St. today", "en", "at [ADDRESS] today"],
+    ["12 Baker Street Station", "en", "[ADDRESS] Station"],
+    ["Hauptstraße 5a, 10115 Berlin", "de", "[ADDRESS], 10115 Berlin"],
+    ["Kölner Str. 5", "de", "[ADDRESS]"],
+    ["Frankfurter Allee 12", "de", "[ADDRESS]"],
+    ["Johann-Sebastian-Bach-Straße 5", "de", "[ADDRESS]"],
+    ["Kaiser-Wilhelm-Platz 3", "de", "[ADDRESS]"],
+    ["Hauptstr.5, Berlin", "de", "[ADDRESS], Berlin"],
+    ["Kerkstraat  12", "nl", "[ADDRESS]"],
+    ["Kerkstraat\t12", "nl", "[ADDRESS]"],
+    ["Kerkstraat\u202f12", "nl", "[ADDRESS]"],
+    ["Kerkstraat 12bis", "nl", "[ADDRESS]"],
+    ["ship to 221-223 Baker Street", "en", "ship to [ADDRESS]"],
+    ["Berliner\u00a0Straße 17", "de", "[ADDRESS]"],
+    ["Berliner  Straße 17", "de", "[ADDRESS]"],
+    ["Der Hauptstraße 5", "de", "Der [ADDRESS]"],
+    ["Nieuwmarkt 4", "nl", "[ADDRESS]"],
+    ["Binnenhof 1", "nl", "[ADDRESS]"],
+    ["Jaagpad 3", "nl", "[ADDRESS]"],
+    ["Reichpietschufer 60", "de", "[ADDRESS]"],
+    ["Grote Markt 1", "nl", "[ADDRESS]"],
+    ["Oude Gracht 12", "nl", "[ADDRESS]"],
+    ["Laan van Meerdervoort 52", "nl", "[ADDRESS]"],
+    ["Laan van Nieuw Oost-Indië 5", "nl", "[ADDRESS]"],
+    ["Hohenzollernring 12", "de", "[ADDRESS]"],
+    ["Kerkstraat nr. 12", "nl", "[ADDRESS]"],
+    ["Kerkstr. 12", "nl", "[ADDRESS]"],
+    ["Hauptstraße Nr. 5", "de", "[ADDRESS]"],
+    ["123 Main Dr", "en", "[ADDRESS]"],
+    ["5 Elm Ct.", "en", "[ADDRESS]"],
+    ["12 Park Row", "en", "[ADDRESS]"],
+    ["lives at 221B Baker Street.", "en", "lives at [ADDRESS]."],
+  ])("masks street address %j (%s)", (text, lang, expected) => {
+    const result = scrubText(text, { languages: [lang] });
+    expect(result.text).toBe(expected);
+    expect(result.counts.address).toBe(expected.split("[ADDRESS]").length - 1);
+  });
+
+  it.each([
+    ["de Kerkstraat is afgesloten", "nl"],
+    ["Mr Baker Street", "en"],
+    ["Amsterdam 2024", "nl"],
+    ["Hier Platz 5", "de"],
+    ["Wieder Platz 2 für Bayern", "de"],
+    ["Der Weg 3 ist frei", "de"],
+    ["Oder Ring 3", "de"],
+    ["The Park 12 tickets", "nl"],
+    ["Theme Park 2 opens", "nl"],
+    ["Safe Haven 3 is out", "nl"],
+    ["took 12 Main Streetcar", "en"],
+    ["Auf Platz 3 landete", "de"],
+    ["Spring 2024", "de"],
+    ["3 new road maps", "en"],
+  ])("leaves street lookalike %j (%s)", (text, lang) => {
+    const result = scrubText(text, { languages: [lang] });
+    expect(result.text).toBe(text);
+    expect(result.counts.address).toBe(0);
+  });
+
+  it("gates street addresses by language pack", () => {
+    expect(scrubText("Kerkstraat 12", { languages: ["en"] }).counts.address).toBe(0);
+    expect(scrubText("12 Baker Street", { languages: ["nl"] }).counts.address).toBe(0);
+    expect(scrubText("Hauptstraße 5", { languages: ["en", "nl"] }).counts.address).toBe(0);
+  });
+
   it("masks grouped IMEI and NL passport", () => {
     const result = scrubText(
       "device 49-015420-323751-8 paspoort XR1001R58",
@@ -583,6 +654,37 @@ describe("native backend", () => {
       throw err;
     }
   });
+
+  it.skipIf(process.env.PII_MCP_NER_MODEL)(
+    "fails closed when ner is requested without a ner build or model",
+    () => {
+      const reason = /`ner` feature|PII_MCP_NER_MODEL/;
+      expect(() => scrubText("Ada Lovelace", { ner: true })).toThrow(reason);
+      expect(() => scrubPayload({ to: "Ada Lovelace" }, { ner: true })).toThrow(reason);
+    },
+  );
+
+  it.skipIf(!process.env.PII_MCP_NER_MODEL)(
+    "masks person names with ner on a ner build",
+    (ctx) => {
+      process.env.PII_MCP_BACKEND = "native";
+      resetNativeCache();
+      let result;
+      try {
+        result = scrubText("Mail Ada Lovelace at ada@example.com", { ner: true });
+      } catch (err) {
+        if (err instanceof PiiScrubError && err.message.includes("`ner` feature")) {
+          ctx.skip();
+        }
+        throw err;
+      }
+      expect(result.text).toBe("Mail [PERSON] at [EMAIL]");
+      expect(result.counts.person).toBe(1);
+      expect(result.counts.email).toBe(1);
+      const payload = scrubPayload({ to: ["Jan de Vries"] }, { ner: true });
+      expect(payload.payload).toEqual({ to: ["[PERSON]"] });
+    },
+  );
 
   it("forces js backend even when native is present", () => {
     process.env.PII_MCP_BACKEND = "js";

@@ -26,6 +26,7 @@ pub enum PiiCategory {
     VatId,
     Passport,
     Phone,
+    Person,
     Address,
     LicensePlate,
 }
@@ -47,6 +48,7 @@ impl PiiCategory {
             Self::VatId => "vat_id",
             Self::Passport => "passport",
             Self::Phone => "phone",
+            Self::Person => "person",
             Self::Address => "address",
             Self::LicensePlate => "license_plate",
         }
@@ -179,7 +181,7 @@ const UNSPACED_RANGES: [(char, char); 13] = [
 /// Email local part (1–64 chars): Unicode letters / digits plus ``_.%+-``.
 const EMAIL_LOCAL: &str = r"[\p{L}\p{N}_.%+\-]{1,64}";
 
-fn is_unspaced_script(c: char) -> bool {
+pub(crate) fn is_unspaced_script(c: char) -> bool {
     UNSPACED_RANGES.iter().any(|&(lo, hi)| (lo..=hi).contains(&c))
 }
 
@@ -1714,6 +1716,74 @@ fn scrub_nl_postcode(text: &str) -> (Option<String>, u32) {
     )
 }
 
+const STREET_UP: &str = r"A-Z\u00c0-\u00d6\u00d8-\u00de";
+const STREET_LOW: &str = r"a-z\u00df-\u00f6\u00f8-\u017f";
+const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?(?-u:\b)";
+const NL_ADJECTIVES: &str =
+    "(?:Grote|Kleine|Oude|Nieuwe|Korte|Lange|Hoge|Lage|Brede|Verlengde)";
+const DE_STREET_WORDS: &str =
+    r"(?:Straße|Strasse|Str(?-u:\b)\.?|Weg|Allee|Platz|Gasse|Damm|Ufer|Ring)";
+
+/// Street + house number, mirroring Python ``STREET_*_RE``. ``\b`` is ASCII
+/// there (``re.ASCII``) and in JS, so it is ``(?-u:\b)`` here.
+fn street_res() -> &'static [Regex; 3] {
+    static RES: OnceLock<[Regex; 3]> = OnceLock::new();
+    RES.get_or_init(|| {
+        let word = format!("[{STREET_UP}][{STREET_LOW}]+");
+        let sep = r"[ \t\u00a0\u202f]{1,3}";
+        let gap = format!("(?:{sep}|-)");
+        let house = format!(r"(?:(?:[Nn]r|[Nn]o)\.?{sep})?{HOUSE_NUMBER}");
+        let nl_words =
+            "(?:Straat|Laan|Weg|Plein|Gracht|Kade|Singel|Dijk|Dreef|Steeg|Hof|Markt|Wal|Haven|Park)";
+        let particle = "(?:van|der|de|den|het|ten|ter|op|aan)";
+        let nl = format!(
+            r"(?:{word}{gap}){{0,3}}(?:[{STREET_UP}][{STREET_LOW}]*(?:straat|str(?-u:\b)\.?|laan|weg|plein|gracht|kade|singel|dijk|dreef|steeg|pad|hof|markt|plantsoen|wal)|{NL_ADJECTIVES}{sep}{nl_words}|{nl_words}(?:{sep}{particle}){{1,2}}{sep}{word}(?:{gap}{word}){{0,3}}){sep}{house}"
+        );
+        let de = format!(
+            r"(?:{word}{gap}){{0,3}}(?:(?:[{STREET_UP}][{STREET_LOW}]*(?:straße|strasse|str(?-u:\b)\.?|weg|allee|platz|gasse|damm|ufer)|[{STREET_UP}][{STREET_LOW}]{{2,}}ring|[{STREET_UP}][{STREET_LOW}]*er{sep}{DE_STREET_WORDS}|[{STREET_UP}][{STREET_LOW}]+-{DE_STREET_WORDS}){sep}|[{STREET_UP}][{STREET_LOW}]*str\.){house}"
+        );
+        let en = format!(
+            r"(?-u:\b)[1-9][0-9]{{0,4}}(?:[-/][0-9]{{1,4}})?[A-Za-z]?{sep}(?:{word}{sep}){{1,3}}(?:(?:Street|Road|Avenue|Lane|Drive|Boulevard|Court|Place|Way|Close|Crescent|Terrace|Square|Highway|Parkway|Row|Loop)(?-u:\b)|(?:St|Rd|Ave|Ln|Blvd|Dr|Ct|Pl|Hwy|Pkwy)(?-u:\b)\.?)"
+        );
+        [nl, de, en].map(|p| Regex::new(&p).unwrap())
+    })
+}
+
+const DE_FUNCTION_WORDS: &[&str] = &[
+    "Der", "Hier", "Oder", "Aber", "Wieder", "Jeder", "Jener", "Einer", "Keiner", "Immer",
+    "Unser", "Euer", "Weder", "Außer",
+];
+
+fn de_street_valid(value: &str) -> bool {
+    let first = value
+        .split(|c: char| c.is_whitespace() || c == '-')
+        .next()
+        .unwrap_or("");
+    !DE_FUNCTION_WORDS.contains(&first)
+}
+
+fn scrub_street(text: &str, pattern: &Regex) -> (Option<String>, u32) {
+    replace_matches(text, pattern, "[ADDRESS]", |_, _, _| true, false)
+}
+
+fn scrub_street_nl(text: &str) -> (Option<String>, u32) {
+    scrub_street(text, &street_res()[0])
+}
+
+fn scrub_street_de(text: &str) -> (Option<String>, u32) {
+    replace_matches(
+        text,
+        &street_res()[1],
+        "[ADDRESS]",
+        |v, _, _| de_street_valid(v),
+        true,
+    )
+}
+
+fn scrub_street_en(text: &str) -> (Option<String>, u32) {
+    scrub_street(text, &street_res()[2])
+}
+
 fn nl_vat_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\b[Nn][Ll][.\s]*\d{9}[.\s]*[Bb][.\s]*\d{2}\b").unwrap())
@@ -1892,8 +1962,22 @@ fn build_detectors(mask: u8) -> Vec<Detector> {
             category: PiiCategory::Ssn,
             scrub: scrub_ssn,
         });
+        pack.push(Detector {
+            category: PiiCategory::Address,
+            scrub: scrub_street_en,
+        });
+    }
+    if has_de {
+        pack.push(Detector {
+            category: PiiCategory::Address,
+            scrub: scrub_street_de,
+        });
     }
     if has_nl {
+        pack.push(Detector {
+            category: PiiCategory::Address,
+            scrub: scrub_street_nl,
+        });
         pack.push(Detector {
             category: PiiCategory::Address,
             scrub: scrub_nl_postcode,

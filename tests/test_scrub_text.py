@@ -443,6 +443,90 @@ class TestNlPostcode:
         assert result["counts"]["address"] == 0
 
 
+class TestStreetAddress:
+    @pytest.mark.parametrize(
+        ("text", "lang", "expected"),
+        [
+            ("woont op Kerkstraat 12, 1234 AB Amsterdam", "nl", "woont op [ADDRESS], [ADDRESS] Amsterdam"),
+            ("adres: Van Baerlestraat 12-3.", "nl", "adres: [ADDRESS]."),
+            ("Sint-Jansstraat 4a", "nl", "[ADDRESS]"),
+            ("ship to 221B Baker Street, London", "en", "ship to [ADDRESS], London"),
+            ("1600 Pennsylvania Avenue NW", "en", "[ADDRESS] NW"),
+            ("at 10 Downing St. today", "en", "at [ADDRESS] today"),
+            ("12 Baker Street Station", "en", "[ADDRESS] Station"),
+            ("Hauptstraße 5a, 10115 Berlin", "de", "[ADDRESS], 10115 Berlin"),
+            ("Kölner Str. 5", "de", "[ADDRESS]"),
+            ("Frankfurter Allee 12", "de", "[ADDRESS]"),
+            ("Johann-Sebastian-Bach-Straße 5", "de", "[ADDRESS]"),
+            ("Kaiser-Wilhelm-Platz 3", "de", "[ADDRESS]"),
+            ("Hauptstr.5, Berlin", "de", "[ADDRESS], Berlin"),
+            ("Kerkstraat  12", "nl", "[ADDRESS]"),
+            ("Kerkstraat\t12", "nl", "[ADDRESS]"),
+            ("Kerkstraat\u202f12", "nl", "[ADDRESS]"),
+            ("Kerkstraat 12bis", "nl", "[ADDRESS]"),
+            ("ship to 221-223 Baker Street", "en", "ship to [ADDRESS]"),
+            ("Berliner\u00a0Straße 17", "de", "[ADDRESS]"),
+            ("Berliner  Straße 17", "de", "[ADDRESS]"),
+            ("Der Hauptstraße 5", "de", "Der [ADDRESS]"),
+            ("Nieuwmarkt 4", "nl", "[ADDRESS]"),
+            ("Binnenhof 1", "nl", "[ADDRESS]"),
+            ("Jaagpad 3", "nl", "[ADDRESS]"),
+            ("Reichpietschufer 60", "de", "[ADDRESS]"),
+            ("Grote Markt 1", "nl", "[ADDRESS]"),
+            ("Oude Gracht 12", "nl", "[ADDRESS]"),
+            ("Laan van Meerdervoort 52", "nl", "[ADDRESS]"),
+            ("Laan van Nieuw Oost-Indië 5", "nl", "[ADDRESS]"),
+            ("Hohenzollernring 12", "de", "[ADDRESS]"),
+            ("Kerkstraat nr. 12", "nl", "[ADDRESS]"),
+            ("Kerkstr. 12", "nl", "[ADDRESS]"),
+            ("Hauptstraße Nr. 5", "de", "[ADDRESS]"),
+            ("123 Main Dr", "en", "[ADDRESS]"),
+            ("5 Elm Ct.", "en", "[ADDRESS]"),
+            ("12 Park Row", "en", "[ADDRESS]"),
+            ("lives at 221B Baker Street.", "en", "lives at [ADDRESS]."),
+        ],
+    )
+    def test_masks_street_and_house_number(self, text: str, lang: str, expected: str) -> None:
+        result = scrub_text(text, languages=[lang])
+        assert result["text"] == expected
+        assert result["counts"]["address"] == expected.count("[ADDRESS]")
+
+    @pytest.mark.parametrize(
+        ("text", "lang"),
+        [
+            ("de Kerkstraat is afgesloten", "nl"),
+            ("Mr Baker Street", "en"),
+            ("Amsterdam 2024", "nl"),
+            ("Hier Platz 5", "de"),
+            ("Wieder Platz 2 für Bayern", "de"),
+            ("Der Weg 3 ist frei", "de"),
+            ("Oder Ring 3", "de"),
+            ("The Park 12 tickets", "nl"),
+            ("Theme Park 2 opens", "nl"),
+            ("Safe Haven 3 is out", "nl"),
+            ("took 12 Main Streetcar", "en"),
+            ("Auf Platz 3 landete", "de"),
+            ("Spring 2024", "de"),
+            ("3 new road maps", "en"),
+        ],
+    )
+    def test_ignores_bare_names_and_lookalikes(self, text: str, lang: str) -> None:
+        result = scrub_text(text, languages=[lang])
+        assert result["text"] == text
+        assert result["counts"]["address"] == 0
+
+    def test_gated_by_language_pack(self) -> None:
+        assert scrub_text("Kerkstraat 12", languages=["en"])["counts"]["address"] == 0
+        assert scrub_text("12 Baker Street", languages=["nl"])["counts"]["address"] == 0
+        assert scrub_text("Hauptstraße 5", languages=["en", "nl"])["counts"]["address"] == 0
+
+    def test_long_capitalized_run_is_linear(self) -> None:
+        text = "Aaaa " * 50_000 + "a" * 100_000
+        started = time.perf_counter()
+        scrub_text(text, languages=["en", "nl", "de"])
+        assert time.perf_counter() - started < 5
+
+
 class TestNlLicensePlate:
     def test_masks_sidecode_4(self) -> None:
         result = scrub_text("auto X-123-YZ wacht, kenteken AB-12-CD gezien", languages=["nl"])

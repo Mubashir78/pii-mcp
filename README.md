@@ -1,10 +1,11 @@
 # pii-mcp
 
-Pattern-based PII scrubbing for MCP servers (regex + checksums). Masks emails,
-IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax
-IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, Dutch postcodes, and
-Dutch license plates in tool results. Not NER for person names or full street
-addresses. Language packs: `en`, `nl`, and opt-in `de`.
+Pattern-based PII scrubbing for MCP servers (regex + checksums), with an
+optional NER pass for person names in the Rust backend. Masks emails, IBANs,
+cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax IDs,
+Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number
+addresses, Dutch postcodes, and Dutch license plates in tool results.
+Language packs: `en`, `nl`, and opt-in `de`.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
 [![npm](https://img.shields.io/npm/v/pii-mcp.svg)](https://www.npmjs.com/package/pii-mcp)
@@ -59,9 +60,10 @@ scrub_payload({"email": "ada@example.com"}, languages=["en"])
 
 Aligned with
 [AP: wat zijn persoonsgegevens](https://www.autoriteitpersoonsgegevens.nl/themas/basis-avg/privacy-en-persoonsgegevens/wat-zijn-persoonsgegevens)
-where pattern/checksum detection can reach them. Names, free-text health data
-(allergies), photos/audio/video, unstructured klant-/personeelsnummers, and
-full street addresses need NER or media handling and stay out of scope.
+where pattern/checksum detection can reach them. Person names need the
+opt-in NER build ([below](#person-names-optional-ner)). Free-text health data
+(allergies), photos/audio/video, and unstructured klant-/personeelsnummers
+stay out of scope.
 
 ### AP coverage (pattern layer)
 
@@ -73,9 +75,78 @@ full street addresses need NER or media handling and stay out of scope.
 | Financiële gegevens                           | `iban`, `credit_card`, `bic`, `vat_id` |                               |
 | BSN / nationaal ID                            | `bsn`, `passport`                      | Passport/NIK format (nl pack) |
 | Online / device IDs                           | `mac`, `imei`                          | IMEI: grouped forms + Luhn    |
-| Adres (structured)                            | `address`                              | NL postcode only              |
+| Adres                                         | `address`                              | Street + number; NL postcode  |
 | Kenteken                                      | `license_plate`                        | nl pack                       |
-| Naam, pasfoto, allergieën, koopgedrag, camera |                                        | NER / media                   |
+| Naam                                          | `person`                               | Opt-in NER build only         |
+| Pasfoto, allergieën, koopgedrag, camera       |                                        | Media / free text             |
+
+## Person names (optional NER)
+
+`ner=True` runs an XLM-R token classifier
+([`Davlan/xlm-roberta-base-ner-hrl`](https://huggingface.co/Davlan/xlm-roberta-base-ner-hrl),
+AFL-3.0; EN/NL/DE among its languages) after the pattern detectors and masks
+person names as `[PERSON]`. It runs in the Rust core on
+[candle](https://github.com/huggingface/candle) (CPU, fp32) and is off by
+default: published wheels and the npm package are built without it, and no
+weights ship with any package.
+
+Build with the `ner` feature:
+
+```bash
+maturin develop --release --features ner                  # Python
+(cd typescript && npm run build:native -- --features ner) # Node
+cargo build -p pii-core --features ner                    # Rust
+```
+
+Download the pinned weights (1.1 GB) and the matching XLM-R tokenizer (MIT)
+into one directory, and point `PII_MCP_NER_MODEL` at it:
+
+```bash
+mkdir -p ner-model && cd ner-model
+M=https://huggingface.co/Davlan/xlm-roberta-base-ner-hrl/resolve/253f557bd8249b8515114cfd7f71974fe5fa4d2f
+T=https://huggingface.co/FacebookAI/xlm-roberta-base/resolve/e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+curl -fL -O "$M/config.json" -O "$M/model.safetensors" -O "$T/tokenizer.json"
+export PII_MCP_NER_MODEL="$PWD"
+```
+
+```python
+scrub_text("Mail Ada Lovelace at ada@example.com", ner=True)
+# {'text': 'Mail [PERSON] at [EMAIL]', ...}
+```
+
+- Pattern hits are masked first; the NER pass never re-tags a placeholder, so
+  nothing is counted twice.
+- `PII_MCP_NER_THRESHOLD` (default `0.9`) is the minimum person probability
+  per token. The default favors precision; lower it (for example `0.5`) to
+  mask more names at the cost of more false positives.
+- `ner=True` raises `PiiScrubError` when the build has no `ner` feature, the
+  backend is pure Python / TypeScript, or the model directory is missing or
+  invalid. Text is never returned with the NER pass silently skipped.
+
+Cost on macOS arm64 (M4 Pro), `scripts/bench_backends.py` with
+`PII_MCP_NER_MODEL` set:
+
+| Case               | Regex only | `ner=True` |
+| ------------------ | ---------- | ---------- |
+| Short mixed PII    | 0.028 ms   | 67 ms      |
+| 2 KiB tool result  | 0.22 ms    | 532 ms     |
+| 16 KiB tool result | 2.3 ms     | 4.6 s      |
+
+Inference time grows with input length, at about 0.3 s per KiB here: a 1 MiB
+tool result takes about 5 minutes. Use `ner=True` for results of a few KiB,
+not for bulk text. Model load takes 2.0 s once per process; peak RSS is about
+2.4 GB. Inference is fp32 only: candle's XLM-R implementation builds its
+attention mask in F32, so fp16 weights do not run.
+
+On the eval (`PII_MCP_NER_MODEL=<dir> python eval/score.py --ner`, EN/NL/DE
+names in 15 contexts), `person` scores recall 0.987 and precision 0.931. Most
+false positives are company names such as `Albert Heijn`. The address
+generators only produce the street shapes the patterns support, so the
+address recall of 1.0 covers those shapes only; precision is measured with
+the `en`, `nl` and `de` packs against bare street names and company names.
+Words that end in a street suffix and are followed by a number (`Keypad 3`,
+`Supermarkt 24`) are masked on purpose, since dropping those suffixes leaks
+real addresses such as `Nieuwmarkt 4`.
 
 ## Packages
 

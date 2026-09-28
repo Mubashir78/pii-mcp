@@ -30,10 +30,12 @@ export interface NativeBinding {
   scrubText: (
     text: string,
     languages?: string[] | undefined | null,
+    ner?: boolean | undefined | null,
   ) => NativeScrubTextResult;
   scrubPayload: (
     payload: unknown,
     languages?: string[] | undefined | null,
+    ner?: boolean | undefined | null,
   ) => NativeScrubPayloadResult;
 }
 

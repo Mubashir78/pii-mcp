@@ -286,7 +286,51 @@ def license_plate_nl(r: R) -> str:
     return value.lower() if r.random() < 0.1 else value
 
 
-# (category, generator, languages the detector needs)
+def _house_number(r: R) -> str:
+    number = str(r.randint(1, 999))
+    return number + r.choice(["", "", "", "a", "B", "-2", "/1"])
+
+
+def street_nl(r: R) -> str:
+    name = r.choice(["Kerk", "Molen", "Dorps", "Stations", "Van Baerle", "Prinsen", "Keizers", "Hoofd", "Sint-Jans", "Oranje"])
+    kind = r.choice(["straat", "laan", "weg", "gracht", "plein", "kade", "singel", "dijk", "steeg", "markt", "hof", "pad"])
+    glued = f"{name}{kind}"
+    spaced = f"{r.choice(['Grote', 'Oude', 'Nieuwe', 'Korte'])} {r.choice(['Markt', 'Gracht', 'Kade', 'Haven'])}"
+    prefixed = f"{r.choice(['Laan', 'Weg', 'Plein'])} {r.choice(['van', 'van de', 'op'])} {r.choice(['Meerdervoort', 'Nieuw Oost-Indië', 'Zuid'])}"
+    return f"{r.choice([glued, glued, glued, spaced, prefixed])} {_house_number(r)}"
+
+
+def street_de(r: R) -> str:
+    glued = f"{r.choice(['Haupt', 'Bahnhof', 'Schiller', 'Goethe', 'Garten', 'Linden', 'Kirch'])}{r.choice(['straße', 'strasse', 'str.', 'weg', 'allee', 'platz', 'gasse', 'ufer', 'ring'])}"
+    spaced = f"{r.choice(['Berliner', 'Frankfurter', 'Kölner', 'Neuer', 'Alter'])} {r.choice(['Straße', 'Str.', 'Allee', 'Weg', 'Ring'])}"
+    return f"{r.choice([glued, glued, spaced])} {_house_number(r)}"
+
+
+def street_en(r: R) -> str:
+    name = r.choice(["Baker", "High", "Church", "Station", "Oxford", "Victoria", "Old Kent", "Mill", "Pennsylvania", "Park"])
+    kind = r.choice(["Street", "Road", "Lane", "Avenue", "Drive", "Close", "Way", "St", "Rd.", "Ave"])
+    return f"{r.randint(1, 9999)}{r.choice(['', '', 'B'])} {name} {kind}"
+
+
+_NAMES = {
+    "en": (["Ada", "John", "Emily", "Michael", "Sarah", "James"], ["Lovelace", "Smith", "Johnson", "Brown", "Taylor", "Wilson"]),
+    "nl": (["Jan", "Pieter", "Sanne", "Emma", "Daan", "Lotte"], ["de Vries", "Jansen", "van den Berg", "Bakker", "Visser", "de Jong"]),
+    "de": (["Anna", "Lukas", "Sophie", "Felix", "Marie", "Jonas"], ["Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Becker"]),
+}
+
+
+def _person(lang: str) -> Callable[[R], str]:
+    first, last = _NAMES[lang]
+
+    def gen(r: R) -> str:
+        return f"{r.choice(first)} {r.choice(last)}"
+
+    gen.__name__ = f"person_{lang}"
+    return gen
+
+
+# (category, generator, languages the detector needs). ``person`` needs the
+# NER pass and is only scored by ``score.py --ner``.
 PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("email", email, ()),
     ("iban", iban, ()),
@@ -305,7 +349,13 @@ PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("phone", phone_de, ("de",)),
     ("phone", phone_intl, ("en",)),
     ("address", postcode_nl, ("nl",)),
+    ("address", street_nl, ("nl",)),
+    ("address", street_en, ("en",)),
+    ("address", street_de, ("de",)),
     ("license_plate", license_plate_nl, ("nl",)),
+    ("person", _person("en"), ()),
+    ("person", _person("nl"), ()),
+    ("person", _person("de"), ()),
 ]
 
 
@@ -347,14 +397,21 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("order_ref", lambda r: f"ORD-{r.randint(2019, 2026)}-{r.randint(1, 999999):06d}"),
     ("stats", lambda r: f"p50={r.uniform(0, 500):.3f}ms p99={r.uniform(0, 5000):.3f}ms n={r.randint(10, 100000)}"),
     ("coord_like", lambda r: f"scale {r.uniform(-1, 1):.4f}, {r.uniform(-1, 1):.4f}"),
+    ("street_word_en", lambda r: r.choice(["The Park 12 tickets", "Theme Park 2 opens", "Safe Haven 3 is out"])),
+    ("street_name", lambda r: r.choice(["Kerkstraat", "Baker Street", "Hauptstraße", "Frankfurter Allee", "de Prinsengracht", "Oxford Road"])),
+    ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
+    ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
 ]
 
 # Clean text that looks like PII to any pattern matcher (bare 9-digit ids vs
-# BSN/SSN). Reported, not scored: flipping these trades recall for precision.
+# BSN/SSN, a number before a real street word). Reported, not scored: flipping
+# these trades recall for precision.
 AMBIGUOUS: list[tuple[str, Callable[[R], str]]] = [
     ("nine_digit_id", lambda r: f"invoice {r.randint(100_000_000, 999_999_999)}"),
     ("semver4", lambda r: f"{r.randint(1, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}.{r.randint(0, 9)}"),
+    ("suffix_word", lambda r: r.choice(["Use the Keypad 3 times", "Open Notepad 2 now", "Supermarkt 24 uur open", "Gerechtshof 2 oordeelde", "Der Käufer 2 zahlt"])),
+    ("street_word_phrase", lambda r: r.choice(["Chapter 12 Main Street", "In 2024 Times Square was busy", "I bought 2 Hard Drive units", "Parkplatz 12 ist frei"])),
     ("decimal_pair", lambda r: f"{r.uniform(2, 80):.4f}, {r.uniform(2, 80):.4f}"),
 ]
 
