@@ -3,9 +3,9 @@
 Universal detectors (email, IBAN, credit card, BIC, MAC, IMEI, IP, location)
 always run. Locale packs add national IDs / phone shapes / NL postcodes /
 kentekens / BTW-ids / passport numbers. Counts always include every
-``PiiType`` key (0 when unused), including reserved ``person`` (unused until
-NER is added). ``address`` is reserved for street-address NER and also
-receives NL postcode hits from the pattern pack.
+``PiiType`` key (0 when unused), including ``person`` (filled only by the
+optional Rust NER pass). ``address`` counts street + house number hits and
+NL postcodes.
 
 ``MAX_SCRUB_BYTES`` matches foro-proxy (32 MiB). Oversize raises
 ``PiiScrubError`` so callers withhold rather than forward unscrubbed text.
@@ -15,7 +15,8 @@ Detector pack order (see ``_detectors_for``): universal → international phone
 SSN) → locale phone forms (before BSN takes the subscriber part of
 ``040 78703244``) → checksum/rule-backed national IDs (DE IdNr before BSN,
 BSN before SSN when both packs are on; NL BTW before BSN, passport after) →
-NL postcode / kenteken when ``nl``.
+street + house number per pack (en, de, nl) → NL postcode / kenteken when
+``nl``.
 
 Optional Rust acceleration: when ``pii_mcp._native`` is importable (shipped in
 platform wheels, or built via maturin), ``scrub_text`` / ``scrub_payload``
@@ -44,6 +45,9 @@ from pii_mcp.detectors import (
     phone_international_detector,
     phone_nl_detector,
     ssn_detector,
+    street_de_detector,
+    street_en_detector,
+    street_nl_detector,
     tax_id_detector,
 )
 
@@ -201,7 +205,11 @@ def _detectors_for(languages: Sequence[str] | None) -> tuple[Detector, ...]:
         pack.append(nl_passport_detector)
     if "en" in langs:
         pack.append(ssn_detector)
+        pack.append(street_en_detector)
+    if "de" in langs:
+        pack.append(street_de_detector)
     if "nl" in langs:
+        pack.append(street_nl_detector)
         pack.append(nl_postcode_detector)
         pack.append(nl_license_plate_detector)
     return tuple(pack)

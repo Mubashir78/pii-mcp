@@ -1,8 +1,8 @@
 //! Language packs and scrub walk for pattern-based detectors.
 //!
 //! Universal detectors always run. Locale packs add national IDs / phones /
-//! NL postcodes. Counts always include every [`PiiType`] key (0 when unused),
-//! including reserved `person` (unused until NER is added).
+//! street addresses / NL postcodes. Counts always include every [`PiiType`]
+//! key (0 when unused); `person` is filled only by the `ner` feature.
 
 use crate::detectors::{detectors_for, PiiCategory};
 use std::borrow::Cow;

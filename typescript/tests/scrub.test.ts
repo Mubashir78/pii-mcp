@@ -255,6 +255,45 @@ describe("scrubText", () => {
     );
   });
 
+  it.each([
+    ["woont op Kerkstraat 12, 1234 AB Amsterdam", "nl", "woont op [ADDRESS], [ADDRESS] Amsterdam"],
+    ["adres: Van Baerlestraat 12-3.", "nl", "adres: [ADDRESS]."],
+    ["Sint-Jansstraat 4a", "nl", "[ADDRESS]"],
+    ["ship to 221B Baker Street, London", "en", "ship to [ADDRESS], London"],
+    ["1600 Pennsylvania Avenue NW", "en", "[ADDRESS] NW"],
+    ["at 10 Downing St. today", "en", "at [ADDRESS] today"],
+    ["12 Baker Street Station", "en", "[ADDRESS] Station"],
+    ["Hauptstraße 5a, 10115 Berlin", "de", "[ADDRESS], 10115 Berlin"],
+    ["Kölner Str. 5", "de", "[ADDRESS]"],
+    ["Frankfurter Allee 12", "de", "[ADDRESS]"],
+    ["Johann-Sebastian-Bach-Straße 5", "de", "[ADDRESS]"],
+  ])("masks street address %j (%s)", (text, lang, expected) => {
+    const result = scrubText(text, { languages: [lang] });
+    expect(result.text).toBe(expected);
+    expect(result.counts.address).toBe(expected.split("[ADDRESS]").length - 1);
+  });
+
+  it.each([
+    ["de Kerkstraat is afgesloten", "nl"],
+    ["Mr Baker Street", "en"],
+    ["Amsterdam 2024", "nl"],
+    ["Kerkstraat 12abc", "nl"],
+    ["took 12 Main Streetcar", "en"],
+    ["Auf Platz 3 landete", "de"],
+    ["Spring 2024", "de"],
+    ["3 new road maps", "en"],
+  ])("leaves street lookalike %j (%s)", (text, lang) => {
+    const result = scrubText(text, { languages: [lang] });
+    expect(result.text).toBe(text);
+    expect(result.counts.address).toBe(0);
+  });
+
+  it("gates street addresses by language pack", () => {
+    expect(scrubText("Kerkstraat 12", { languages: ["en"] }).counts.address).toBe(0);
+    expect(scrubText("12 Baker Street", { languages: ["nl"] }).counts.address).toBe(0);
+    expect(scrubText("Hauptstraße 5", { languages: ["en", "nl"] }).counts.address).toBe(0);
+  });
+
   it("masks grouped IMEI and NL passport", () => {
     const result = scrubText(
       "device 49-015420-323751-8 paspoort XR1001R58",

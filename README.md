@@ -2,9 +2,9 @@
 
 Pattern-based PII scrubbing for MCP servers (regex + checksums). Masks emails,
 IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax
-IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, Dutch postcodes, and
-Dutch license plates in tool results. Not NER for person names or full street
-addresses. Language packs: `en`, `nl`, and opt-in `de`.
+IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number addresses, Dutch
+postcodes, and Dutch license plates in tool results. Language packs: `en`,
+`nl`, and opt-in `de`.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
 [![npm](https://img.shields.io/npm/v/pii-mcp.svg)](https://www.npmjs.com/package/pii-mcp)
@@ -60,8 +60,8 @@ scrub_payload({"email": "ada@example.com"}, languages=["en"])
 Aligned with
 [AP: wat zijn persoonsgegevens](https://www.autoriteitpersoonsgegevens.nl/themas/basis-avg/privacy-en-persoonsgegevens/wat-zijn-persoonsgegevens)
 where pattern/checksum detection can reach them. Names, free-text health data
-(allergies), photos/audio/video, unstructured klant-/personeelsnummers, and
-full street addresses need NER or media handling and stay out of scope.
+(allergies), photos/audio/video, and unstructured klant-/personeelsnummers
+stay out of scope.
 
 ### AP coverage (pattern layer)
 
@@ -73,7 +73,7 @@ full street addresses need NER or media handling and stay out of scope.
 | Financiële gegevens                           | `iban`, `credit_card`, `bic`, `vat_id` |                               |
 | BSN / nationaal ID                            | `bsn`, `passport`                      | Passport/NIK format (nl pack) |
 | Online / device IDs                           | `mac`, `imei`                          | IMEI: grouped forms + Luhn    |
-| Adres (structured)                            | `address`                              | NL postcode only              |
+| Adres                                         | `address`                              | Street + number; NL postcode  |
 | Kenteken                                      | `license_plate`                        | nl pack                       |
 | Naam, pasfoto, allergieën, koopgedrag, camera |                                        | NER / media                   |
 
