@@ -72,8 +72,12 @@ git worktree add .worktrees/<branch> -b <branch> origin/main
   minor, `fix`/`perf` → patch, `docs`/`chore`/`test`/`refactor`/`ci` → none.
   Pick the type that reflects real user impact. Never edit the version or
   `CHANGELOG.md`.
-- Document contracts in docstrings, not `#` comments (`.cursor/rules/`). No
-  comment that narrates code. Clear direct language, no metaphors.
+- Don't write comments unless they are really necessary. Code should explain
+  itself; add a comment only when the code would not make sense without it.
+  API contracts go in docstrings, not `#` comments (`.cursor/rules/`).
+- In all writing (commit messages, PR body, review triage, the final report):
+  no metaphors. Use clear, direct language. Be concise and objective. No
+  fluff.
 - Tests must assert real behavior or catch a real failure mode. No
   tautologies, no coverage-only fillers, never weaken or skip an existing
   test to get green.
@@ -111,8 +115,10 @@ Repeat, at most **5 rounds**:
      > that leaks through unscrubbed (missed formats, boundary cases,
      > separators), false positives on clean text, catastrophic or quadratic
      > regexes, behavior that differs between the Python, Rust, and
-     > TypeScript backends, fail-open paths, security holes, narrating `#`
-     > comments where a docstring belongs, tautological or weakened tests,
+     > TypeScript backends, fail-open paths, security holes, comments the
+     > code does not need (code should explain itself; a comment is only
+     > justified when the code would not make sense without it), metaphors
+     > or fluff in docs and messages, tautological or weakened tests,
      > missing tests, commit messages that break the Conventional Commits
      > rules or carry the wrong release type, and parts of the issue left
      > undone. Run the tests yourself if it helps. Do not edit files. Return
