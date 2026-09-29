@@ -272,6 +272,43 @@ def postcode_nl(r: R) -> str:
     return f"{r.randint(1000, 9999)}{r.choice([' ', ''])}{_letters(r, 2)}"
 
 
+# 124 real postcode areas plus ``QC``, which Royal Mail lists as non-geographic
+# (awarding bodies), the detector's guard against product strings that have a
+# postcode shape. Kept here rather than imported: the eval must not share logic
+# with the code it scores.
+_UK_POSTCODE_AREAS = (
+    "AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH "
+    "DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE "
+    "KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH "
+    "PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR "
+    "TS TW UB W WA WC WD WF WN WR WS WV YO ZE"
+).split()
+
+
+def postcode_uk(r: R) -> str:
+    """A well-formed UK postcode in one of the six legal outward shapes.
+
+    A district never starts with ``0`` (``AB10``, not ``AB0``), and a trailing
+    letter follows a single-digit district only (``EC1A`` is real, ``AB12C`` is
+    not), so every sample is a shape Royal Mail issues. ``GIR 0AA`` is the only
+    three-letter outward code and is emitted as-is rather than composed, so the
+    generator never invents an area.
+    """
+    if r.random() < 0.02:
+        return "GIR 0AA"
+    area = r.choice(_UK_POSTCODE_AREAS)
+    district = (
+        str(r.randint(10, 99)) if r.random() < 0.7 else str(r.randint(1, 9))
+    )
+    outward = f"{area}{district}"
+    if len(district) == 1 and r.random() < 0.25:
+        outward += r.choice(string.ascii_uppercase)
+    inward = r.choice(string.digits) + "".join(
+        r.choice("ABDEFGHJLNPQRSTUWXYZ") for _ in range(2)
+    )
+    return f"{outward} {inward}"
+
+
 def license_plate_nl(r: R) -> str:
     d = lambda n: _digits(r, n)  # noqa: E731
     value = r.choice(
@@ -349,6 +386,7 @@ PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("phone", phone_de, ("de",)),
     ("phone", phone_intl, ("en",)),
     ("address", postcode_nl, ("nl",)),
+    ("address", postcode_uk, ("en",)),
     ("address", street_nl, ("nl",)),
     ("address", street_en, ("en",)),
     ("address", street_de, ("de",)),
@@ -402,6 +440,11 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("company", lambda r: f"{r.choice(['Philips', 'Albert Heijn', 'Siemens', 'Baker & Co', 'Van Dijk Bouw BV'])} {r.choice(['Q3', 'report', '2024', 'team'])}"),
     ("city_year", lambda r: f"{r.choice(['Amsterdam', 'Rotterdam', 'Berlin', 'London'])} {r.randint(1990, 2030)}"),
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
+    # Product strings with the shape of a UK postcode but an area that does not
+    # exist. They belong in CLEAN: that is what makes the area guard — the FP
+    # mitigation the issue recommends — carry scored signal. ``M2 1TB`` cannot
+    # live here, so it stays in AMBIGUOUS.
+    ("uk_postcode_product", lambda r: r.choice(["A4 2PK", "PS5 1TB", "A1 2PK"])),
 ]
 
 # Clean text that looks like PII to any pattern matcher (bare 9-digit ids vs
@@ -413,6 +456,11 @@ AMBIGUOUS: list[tuple[str, Callable[[R], str]]] = [
     ("suffix_word", lambda r: r.choice(["Use the Keypad 3 times", "Open Notepad 2 now", "Supermarkt 24 uur open", "Gerechtshof 2 oordeelde", "Der Käufer 2 zahlt"])),
     ("street_word_phrase", lambda r: r.choice(["Chapter 12 Main Street", "In 2024 Times Square was busy", "I bought 2 Hard Drive units", "Parkplatz 12 ist frei"])),
     ("decimal_pair", lambda r: f"{r.uniform(2, 80):.4f}, {r.uniform(2, 80):.4f}"),
+    # ``M2 1TB`` (an SSD) is a well-formed postcode with a real area, so the
+    # guard cannot reject it and it is masked — the accepted cost of the guard.
+    # The product strings the guard does reject live in CLEAN, where they are
+    # scored.
+    ("uk_postcode_ambiguous", lambda r: r.choice(["M2 1TB", "M2 2TB", "M1 1TB"])),
 ]
 
 
