@@ -5,7 +5,8 @@
 
 use crate::checksum::{
     bsn_valid_grouped, iban_valid, imei_valid, is_group_sep, luhn_valid, nl_passport_valid,
-    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, GROUP_DASHES, GROUP_SPACES,
+    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, uk_postcode_valid, GROUP_DASHES,
+    GROUP_SPACES,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -1716,6 +1717,61 @@ fn scrub_nl_postcode(text: &str) -> (Option<String>, u32) {
     )
 }
 
+/// The six legal outward shapes, or the one three-letter code (`GIR`). The
+/// issue's sketch ``[A-Z]{1,2}[0-9][A-Z0-9]?`` also admits ``A99A`` and
+/// ``AA99A``, which Royal Mail does not issue. The `regex` crate has no
+/// lookaround, so ``uk_postcode_boundary_ok`` stands in for Python's
+/// ``(?<![A-Za-z0-9])…(?![A-Za-z0-9])``.
+const UK_POSTCODE_OUTWARD: &str =
+    r"(?:[A-Z][0-9](?:[A-Z]|[0-9])?|[A-Z]{2}[0-9](?:[A-Z]|[0-9])?|GIR)";
+const UK_POSTCODE_INWARD: &str = r"[0-9][ABD-HJLNP-UW-Z]{2}";
+/// Any whitespace run, as the NL postcode and street detectors take: a
+/// postcode pasted from HTML carries a no-break space and would otherwise leak.
+const UK_POSTCODE_SEP: &str = "[ \t\u{a0}\u{202f}]+";
+
+fn uk_postcode_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(&format!(
+            r"{UK_POSTCODE_OUTWARD}{UK_POSTCODE_SEP}{UK_POSTCODE_INWARD}"
+        ))
+        .unwrap()
+    })
+}
+
+/// ``(?<![A-Za-z0-9])`` / ``(?![A-Za-z0-9])``: ASCII alphanumerics only.
+///
+/// A bare ``\b`` is wrong here in both directions. The `regex` crate's ``\b``
+/// is Unicode-aware, so it would reject a hit after ``é`` or ``٣`` that Python
+/// and JS mask; ``(?-u:\b)`` fixes that but counts ``_`` as a word character,
+/// where Python's class does not. ``is_word_char`` likewise includes ``_`` and
+/// is not the predicate this needs.
+fn uk_postcode_boundary_ok(text: &str, start: usize, end: usize) -> bool {
+    if start > 0 {
+        let prev = text[..start].chars().next_back().unwrap();
+        if prev.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    if end < text.len() {
+        let next = text[end..].chars().next().unwrap();
+        if next.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    true
+}
+
+fn scrub_uk_postcode(text: &str) -> (Option<String>, u32) {
+    replace_matches(
+        text,
+        uk_postcode_re(),
+        "[ADDRESS]",
+        |v, s, e| uk_postcode_boundary_ok(text, s, e) && uk_postcode_valid(v),
+        false,
+    )
+}
+
 const STREET_UP: &str = r"A-Z\u00c0-\u00d6\u00d8-\u00de";
 const STREET_LOW: &str = r"a-z\u00df-\u00f6\u00f8-\u017f";
 const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?(?-u:\b)";
@@ -1965,6 +2021,10 @@ fn build_detectors(mask: u8) -> Vec<Detector> {
         pack.push(Detector {
             category: PiiCategory::Address,
             scrub: scrub_street_en,
+        });
+        pack.push(Detector {
+            category: PiiCategory::Address,
+            scrub: scrub_uk_postcode,
         });
     }
     if has_de {

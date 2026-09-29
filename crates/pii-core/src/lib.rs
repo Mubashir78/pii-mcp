@@ -1,8 +1,8 @@
 //! Shared PII core: regex detectors, checksum validators, and scrub walk.
 //!
 //! Detector order matches the Python `pii_mcp` pack: universal → phones →
-//! national IDs → street + house number → NL postcode. Earlier matches become
-//! digit-free placeholders before looser numeric detectors run.
+//! national IDs → street + house number → NL and UK postcodes. Earlier matches
+//! become digit-free placeholders before looser numeric detectors run.
 
 mod checksum;
 mod detectors;
@@ -10,7 +10,10 @@ mod detectors;
 mod ner;
 mod scrub;
 
-pub use checksum::{bsn_valid, iban_valid, luhn_valid, nl_postcode_valid, ssn_valid, tax_id_valid};
+pub use checksum::{
+    bsn_valid, iban_valid, luhn_valid, nl_postcode_valid, ssn_valid, tax_id_valid,
+    uk_postcode_valid,
+};
 pub use detectors::{detectors_for, PiiCategory};
 #[cfg(feature = "ner")]
 pub use ner::{MODEL_ENV as NER_MODEL_ENV, THRESHOLD_ENV as NER_THRESHOLD_ENV};

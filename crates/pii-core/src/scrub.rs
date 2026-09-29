@@ -1,8 +1,9 @@
 //! Language packs and scrub walk for pattern-based detectors.
 //!
 //! Universal detectors always run. Locale packs add national IDs / phones /
-//! street addresses / NL postcodes. Counts always include every [`PiiType`]
-//! key (0 when unused); `person` is filled only by the `ner` feature.
+//! street addresses / NL and UK postcodes. Counts always include every
+//! [`PiiType`] key (0 when unused); `person` is filled only by the `ner`
+//! feature.
 
 use crate::detectors::{detectors_for, PiiCategory};
 use std::borrow::Cow;
@@ -476,6 +477,112 @@ mod tests {
         let langs = vec!["en".to_string()];
         let r = scrub_text("BSN 100000009 on file", Some(&langs), true, false).unwrap();
         assert_eq!(r.counts["bsn"], 0);
+    }
+
+    #[test]
+    fn masks_uk_postcode_in_every_outward_shape() {
+        let langs = vec!["en".to_string()];
+        for value in [
+            // One real, delivered postcode per outward shape.
+            "M1 1AE",   // A9
+            "B33 8TH",  // A99
+            "W1A 0AX",  // A9A
+            "SW1A 1AA", // AA9A
+            "NW1 6XE",  // AA9
+            "GU30 7RS", // AA99
+            "E1W 1AA",  // AA9A
+            "JE2 3AA",  // Channel Islands
+            "GY1 1AA",
+            "ZE1 0AA", // Shetland
+            // The rest of the issue's examples.
+            "NR1 3PS",
+            "EC1A 1BB",
+        ] {
+            let r = scrub_text(&format!("postcode {value}"), Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, "postcode [ADDRESS]", "{value}");
+            assert_eq!(r.counts["address"], 1, "{value}");
+        }
+    }
+
+    #[test]
+    fn masks_uk_postcode_across_whitespace_runs() {
+        // HTML and PDFs substitute no-break spaces for the separator.
+        let langs = vec!["en".to_string()];
+        for separator in [" ", "  ", "\t", "\u{a0}", "\u{202f}"] {
+            let text = format!("postcode NW1{separator}6XE");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, "postcode [ADDRESS]", "{separator:?}");
+            assert_eq!(r.counts["address"], 1, "{separator:?}");
+        }
+    }
+
+    #[test]
+    fn masks_uk_postcode_after_a_street_address() {
+        let langs = vec!["en".to_string()];
+        let r = scrub_text(
+            "Ship to 221B Baker Street, London NW1 6XE",
+            Some(&langs),
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(r.text, "Ship to [ADDRESS], London [ADDRESS]");
+        assert_eq!(r.counts["address"], 2);
+    }
+
+    #[test]
+    fn rejects_uk_postcode_areas_that_do_not_exist() {
+        let langs = vec!["en".to_string()];
+        for value in ["A4 2PK", "PS5 1TB", "A1 2PK"] {
+            let text = format!("part {value} in stock");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, text, "{value}");
+            assert_eq!(r.counts["address"], 0, "{value}");
+        }
+    }
+
+    #[test]
+    fn rejects_uk_outward_shapes_that_do_not_exist() {
+        // ``A99A`` / ``AA99A`` are not shapes Royal Mail issues, though the
+        // issue's sketch ``[A-Z]{1,2}[0-9][A-Z0-9]?`` admits them.
+        let langs = vec!["en".to_string()];
+        for value in ["AB12C 3DE", "M12C 3DE", "LA23J 2DX", "SW123 4AB"] {
+            let text = format!("order {value} shipped");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.counts["address"], 0, "{value}");
+        }
+    }
+
+    #[test]
+    fn uk_postcode_needs_the_en_pack() {
+        let langs = vec!["nl".to_string()];
+        let r = scrub_text("postcode NW1 6XE", Some(&langs), true, false).unwrap();
+        assert_eq!(r.text, "postcode NW1 6XE");
+        assert_eq!(r.counts["address"], 0);
+    }
+
+    #[test]
+    fn uk_postcode_boundaries_are_ascii_alphanumeric_only() {
+        // Python's ``(?<![A-Za-z0-9])…(?![A-Za-z0-9])``: ``_`` is a boundary,
+        // ASCII letters and digits are not, and so are non-ASCII letters and
+        // digits. A Unicode ``\b`` masks the first group and rejects the third.
+        let langs = vec!["en".to_string()];
+        for (text, expected) in [
+            ("_NW1 6XE", "_[ADDRESS]"),
+            ("NW1 6XE_", "[ADDRESS]_"),
+            ("__NW1 6XE__", "__[ADDRESS]__"),
+            ("\u{e9}NW1 6XE", "\u{e9}[ADDRESS]"),
+            ("NW1 6XE\u{e9}", "[ADDRESS]\u{e9}"),
+            ("\u{416}NW1 6XE", "\u{416}[ADDRESS]"),
+            ("NW1 6XE\u{663}", "[ADDRESS]\u{663}"),
+            // Glued to ASCII alphanumerics: no boundary, so no hit.
+            ("aNW1 6XE", "aNW1 6XE"),
+            ("1NW1 6XE", "1NW1 6XE"),
+            ("NW1 6XEa", "NW1 6XEa"),
+        ] {
+            let r = scrub_text(text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, expected, "{text:?}");
+        }
     }
 
     #[cfg(not(feature = "ner"))]

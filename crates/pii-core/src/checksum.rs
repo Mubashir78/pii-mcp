@@ -357,6 +357,36 @@ pub fn nl_postcode_valid(value: &str) -> bool {
     !NL_POSTCODE_REJECTS.contains(&&compact[4..])
 }
 
+/// The postcode areas Royal Mail lists: 124 real ones plus `QC`, which is
+/// non-geographic (awarding bodies). The guard against product strings that
+/// have a postcode shape (`A4 2PK`, `PS5 1TB`).
+const UK_POSTCODE_AREAS: &str = "\
+AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH \
+DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE \
+KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH \
+PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR \
+TS TW UB W WA WC WD WF WN WR WS WV YO ZE";
+
+/// `GIR 0AA` is the only outward code with three letters.
+const UK_POSTCODE_NON_GEOGRAPHIC: &[&str] = &["GIR"];
+
+/// UK postcode `NW1 6XE`: the outward letters must name a real postcode area.
+pub fn uk_postcode_valid(value: &str) -> bool {
+    let area_len = value.bytes().take_while(u8::is_ascii_uppercase).count();
+    if area_len == 0 {
+        return false;
+    }
+    let Some(area) = value.get(..area_len) else {
+        return false;
+    };
+    if UK_POSTCODE_NON_GEOGRAPHIC.contains(&area) {
+        return true;
+    }
+    UK_POSTCODE_AREAS
+        .split_ascii_whitespace()
+        .any(|known| known == area)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,6 +471,21 @@ mod tests {
         assert!(!nl_postcode_valid("1234 SA"));
         // Detector `\s` can match NBSP; validator must still accept.
         assert!(nl_postcode_valid("1012\u{00a0}AB"));
+    }
+
+    #[test]
+    fn uk_postcode() {
+        assert!(uk_postcode_valid("NW1 6XE"));
+        assert!(uk_postcode_valid("GU30 7RS"));
+        assert!(uk_postcode_valid("EC1A 1BB"));
+        // The one three-letter outward code.
+        assert!(uk_postcode_valid("GIR 0AA"));
+        // Area-prefix guard: real areas pass, lookalike product strings do not.
+        assert!(!uk_postcode_valid("A4 2PK"));
+        assert!(!uk_postcode_valid("PS5 1TB"));
+        // `M2 1TB` is a well-formed postcode; recall wins over this false
+        // positive (see `AMBIGUOUS` in eval/generators.py).
+        assert!(uk_postcode_valid("M2 1TB"));
     }
 
     #[test]
