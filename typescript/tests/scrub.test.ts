@@ -575,6 +575,112 @@ describe("scrubText", () => {
     );
   });
 
+  it.each([
+    ["M1 1AE"],
+    ["B33 8TH"],
+    ["W1A 0AX"],
+    ["SW1A 1AA"],
+    ["NW1 6XE"],
+    ["GU30 7RS"],
+    ["E1W 1AA"],
+    ["JE2 3AA"],
+    ["GY1 1AA"],
+    ["ZE1 0AA"],
+    ["NR1 3PS"],
+    ["EC1A 1BB"],
+  ])("masks every UK postcode outward shape (%s)", (value) => {
+    const result = scrubText(`postcode ${value}`, { languages: ["en"] });
+    expect(result.text).toBe("postcode [ADDRESS]");
+    expect(result.counts.address).toBe(1);
+  });
+
+  it("masks the non-geographic UK outward code", () => {
+    const result = scrubText("GIR 0AA", { languages: ["en"] });
+    expect(result.text).toBe("[ADDRESS]");
+    expect(result.counts.address).toBe(1);
+  });
+
+  it.each([[" "], ["  "], ["\t"], ["\u00a0"], ["\u202f"]])(
+    "masks a UK postcode across a whitespace run (%j)",
+    (separator) => {
+      const result = scrubText(`postcode NW1${separator}6XE`, {
+        languages: ["en"],
+      });
+      expect(result.text).toBe("postcode [ADDRESS]");
+      expect(result.counts.address).toBe(1);
+    },
+  );
+
+  it("masks a UK postcode after a street address", () => {
+    const result = scrubText("Ship to 221B Baker Street, London NW1 6XE", {
+      languages: ["en"],
+    });
+    expect(result.text).toBe("Ship to [ADDRESS], London [ADDRESS]");
+    expect(result.counts.address).toBe(2);
+  });
+
+  it("masks a UK postcode inside JSON", () => {
+    const result = scrubText('{"postcode": "EC1A 1BB", "city": "London"}', {
+      languages: ["en"],
+    });
+    expect(result.text).toBe('{"postcode": "[ADDRESS]", "city": "London"}');
+  });
+
+  it("masks a UK postcode inside CSV", () => {
+    const result = scrubText("id,SW1A 1AA,2024-01-15,active", {
+      languages: ["en"],
+    });
+    expect(result.text).toBe("id,[ADDRESS],2024-01-15,active");
+  });
+
+  it.each([["A4 2PK"], ["PS5 1TB"], ["A1 2PK"]])(
+    "rejects UK postcode areas that do not exist (%s)",
+    (value) => {
+      const result = scrubText(`part ${value} in stock`, { languages: ["en"] });
+      expect(result.counts.address).toBe(0);
+      expect(result.text).toContain(value);
+    },
+  );
+
+  it.each([["AB12C 3DE"], ["M12C 3DE"], ["LA23J 2DX"], ["SW123 4AB"]])(
+    "rejects UK outward shapes that do not exist (%s)",
+    (value) => {
+      expect(
+        scrubText(`order ${value} shipped`, { languages: ["en"] }).counts.address,
+      ).toBe(0);
+    },
+  );
+
+  it.each([
+    ["_NW1 6XE"],
+    ["NW1 6XE_"],
+    ["__NW1 6XE__"],
+    ["\u00e9NW1 6XE"],
+    ["NW1 6XE\u00e9"],
+    ["\u0416NW1 6XE"],
+    ["NW1 6XE\u0663"],
+  ])("masks when the neighbour is not ASCII alphanumeric (%s)", (value) => {
+    const result = scrubText(value, { languages: ["en"] });
+    expect(result.counts.address).toBe(1);
+    expect(result.text).toContain("[ADDRESS]");
+  });
+
+  it.each([
+    ["NW16XE"],
+    ["nw1 6xe"],
+    ["XNW1 6XE"],
+    ["1NW1 6XE"],
+    ["NW1 6XEa"],
+  ])("ignores UK postcode shapes out of scope (%s)", (value) => {
+    expect(scrubText(`ref ${value} end`, { languages: ["en"] }).counts.address).toBe(0);
+  });
+
+  it("disables the UK postcode detector without the en pack", () => {
+    const result = scrubText("postcode NW1 6XE", { languages: ["nl"] });
+    expect(result.text).toBe("postcode NW1 6XE");
+    expect(result.counts.address).toBe(0);
+  });
+
   it("fails closed on oversize input", async () => {
     const { scrubTextJs } = await import("../src/scrub-js.js");
     const { MAX_SCRUB_BYTES, PiiScrubError: Err } = await import(
