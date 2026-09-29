@@ -23,6 +23,9 @@ scrub_text(
 # Contact [EMAIL]. IBAN [IBAN]. card [CREDIT_CARD]
 ```
 
+For runnable scripts including a FastMCP server and payload scrubbing, see the [`examples/`](examples/) directory.
+
+
 ## Install
 
 ```bash
