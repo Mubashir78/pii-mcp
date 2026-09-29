@@ -49,16 +49,9 @@
  *   — national identificatienummer alongside BSN; format only, no check digit.
  * - NL postcode (``address``): ``1234 AB`` / ``1234AB`` with uppercase letters
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
- * - UK postcode (``address``): ``NW1 6XE`` — one of the six outward shapes
- *   (``A9``, ``A99``, ``A9A``, ``AA9``, ``AA99``, ``AA9A``) and an inward code
- *   (1 digit, then 2 letters never ``C I K M O V``) separated by a whitespace
- *   run, uppercase only. The compact form (``NW16XE``) is left out: without a
- *   separator it collides with ordinary alphanumeric tokens. Product strings
- *   shaped like a postcode (``M2 1TB`` for an SSD, ``A4 2PK``, ``PS5 1TB``)
- *   are held off by requiring the outward letters to be one of the postcode
- *   areas Royal Mail lists — the inward-letter rule alone still admits
- *   ``M2 1TB``. ``GIR 0AA`` is the one three-letter outward code and is
- *   accepted as-is.
+ * - UK postcode (``address``): ``NW1 6XE`` / ``EC1A 1BB``, uppercase, spaced
+ *   (compact ``NW16XE`` collides with ordinary tokens). The outward letters
+ *   must be a Royal Mail area, which rejects ``A4 2PK`` / ``PS5 1TB``.
  * - Street address (``address``): street name + house number per pack. ``nl``:
  *   a capitalized word ending in
  *   ``straat``/``str.``/``laan``/``weg``/``gracht``/… then the number
@@ -1140,46 +1133,22 @@ export const nlPostcodeDetector: Detector = {
   scrub: scrubNlPostcode,
 };
 
-// The six legal outward shapes: A9, A99, A9A, AA9, AA99, AA9A. The issue's
-// sketch also admits `A99A` and `AA99A`, which Royal Mail does not issue.
-// `[0-9]` rather than `\d`: `\d` is Unicode in Python and Rust but ASCII in JS.
-const UK_POSTCODE_OUTWARD = String.raw`(?:[A-Z][0-9](?:[A-Z]|[0-9])?|[A-Z]{2}[0-9](?:[A-Z]|[0-9])?|GIR)`;
-const UK_POSTCODE_INWARD = String.raw`[0-9][ABD-HJLNP-UW-Z]{2}`;
-// Any whitespace run, as the NL postcode and street detectors take: a postcode
-// pasted from HTML carries a no-break space and would otherwise leak.
-const UK_POSTCODE_SEP = String.raw`[ \t\u00a0\u202f]+`;
-// ``GIR 0AA`` is the only outward code with three letters.
-const UK_POSTCODE_NON_GEOGRAPHIC = new Set(["GIR"]);
-// 124 real postcode areas plus ``QC``, which Royal Mail lists as non-geographic
-// (awarding bodies). Requiring a listed area is the guard that keeps ``A4 2PK``
-// and ``PS5 1TB`` from matching; ``M2 1TB`` (an SSD) still does, since it is a
-// well-formed postcode and no context-free rule separates the two. Recall comes
-// first in this repo, so that trade is accepted and the case is recorded in
-// ``AMBIGUOUS``.
+// Outward A9, A99, A9A, AA9, AA99, AA9A, or GIR; inward 9AA.
+const UK_POSTCODE_RE =
+  /(?<![A-Za-z0-9])(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR)[ \t\u00a0\u202f]+[0-9][ABD-HJLNP-UW-Z]{2}(?![A-Za-z0-9])/g;
+// Royal Mail postcode areas, plus non-geographic QC and GIR.
 const UK_POSTCODE_AREAS = new Set(
   (
     "AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH " +
     "DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE " +
     "KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH " +
     "PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR " +
-    "TS TW UB W WA WC WD WF WN WR WS WV YO ZE"
+    "TS TW UB W WA WC WD WF WN WR WS WV YO ZE GIR"
   ).split(" "),
-);
-const UK_POSTCODE_RE = new RegExp(
-  String.raw`(?<![A-Za-z0-9])` +
-    UK_POSTCODE_OUTWARD +
-    UK_POSTCODE_SEP +
-    UK_POSTCODE_INWARD +
-    String.raw`(?![A-Za-z0-9])`,
-  "g",
 );
 
 function ukPostcodeValid(value: string): boolean {
-  const area = /^[A-Z]+/.exec(value)?.[0] ?? "";
-  if (UK_POSTCODE_NON_GEOGRAPHIC.has(area)) {
-    return true;
-  }
-  return UK_POSTCODE_AREAS.has(area);
+  return UK_POSTCODE_AREAS.has(/^[A-Z]+/.exec(value)![0]);
 }
 
 function scrubUkPostcode(text: string): { text: string; count: number } {

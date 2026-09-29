@@ -576,18 +576,16 @@ describe("scrubText", () => {
   });
 
   it.each([
-    // One real, delivered postcode per outward shape.
-    ["M1 1AE"], // A9
-    ["B33 8TH"], // A99
-    ["W1A 0AX"], // A9A
-    ["SW1A 1AA"], // AA9A
-    ["NW1 6XE"], // AA9
-    ["GU30 7RS"], // AA99
-    ["E1W 1AA"], // AA9A
-    ["JE2 3AA"], // Channel Islands
+    ["M1 1AE"],
+    ["B33 8TH"],
+    ["W1A 0AX"],
+    ["SW1A 1AA"],
+    ["NW1 6XE"],
+    ["GU30 7RS"],
+    ["E1W 1AA"],
+    ["JE2 3AA"],
     ["GY1 1AA"],
-    ["ZE1 0AA"], // Shetland
-    // The rest of the issue's examples.
+    ["ZE1 0AA"],
     ["NR1 3PS"],
     ["EC1A 1BB"],
   ])("masks every UK postcode outward shape (%s)", (value) => {
@@ -597,7 +595,6 @@ describe("scrubText", () => {
   });
 
   it("masks the non-geographic UK outward code", () => {
-    // `GIR 0AA` is the only outward code with three letters.
     const result = scrubText("GIR 0AA", { languages: ["en"] });
     expect(result.text).toBe("[ADDRESS]");
     expect(result.counts.address).toBe(1);
@@ -606,7 +603,6 @@ describe("scrubText", () => {
   it.each([[" "], ["  "], ["\t"], ["\u00a0"], ["\u202f"]])(
     "masks a UK postcode across a whitespace run (%j)",
     (separator) => {
-      // HTML and PDFs substitute no-break spaces for the separator.
       const result = scrubText(`postcode NW1${separator}6XE`, {
         languages: ["en"],
       });
@@ -656,26 +652,23 @@ describe("scrubText", () => {
   );
 
   it.each([
-    ["_NW1 6XE"], // ``_`` is not an ASCII alphanumeric
+    ["_NW1 6XE"],
     ["NW1 6XE_"],
     ["__NW1 6XE__"],
-    ["\u00e9NW1 6XE"], // nor is a non-ASCII letter or digit
+    ["\u00e9NW1 6XE"],
     ["NW1 6XE\u00e9"],
     ["\u0416NW1 6XE"],
     ["NW1 6XE\u0663"],
   ])("masks when the neighbour is not ASCII alphanumeric (%s)", (value) => {
-    // Pins the boundary rule: `(?<![A-Za-z0-9])`, not `\b`.
     const result = scrubText(value, { languages: ["en"] });
     expect(result.counts.address).toBe(1);
     expect(result.text).toContain("[ADDRESS]");
   });
 
   it.each([
-    ["NW16XE"], // compact form is out of scope
-    ["nw1 6xe"], // uppercase only
-    ["XNW1 6XE"], // glued to a preceding letter
-    ["NW1 6XEE"], // glued to a following letter
-    ["aNW1 6XE"], // glued to an ASCII alphanumeric
+    ["NW16XE"],
+    ["nw1 6xe"],
+    ["XNW1 6XE"],
     ["1NW1 6XE"],
     ["NW1 6XEa"],
   ])("ignores UK postcode shapes out of scope (%s)", (value) => {

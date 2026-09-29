@@ -54,15 +54,9 @@ Patterns:
 - NL postcode (``address``): ``1234 AB`` / ``1234AB`` (one or more spaces)
   with uppercase letters only and SA/SD/SS rejects — structured fragment, not
   street-address NER.
-- UK postcode (``address``): ``NW1 6XE`` — one of the six outward shapes
-  (``A9``, ``A99``, ``A9A``, ``AA9``, ``AA99``, ``AA9A``) and an inward code
-  (1 digit, then 2 letters never ``C I K M O V``) separated by a whitespace
-  run, uppercase only. The compact form (``NW16XE``) is left out: without a
-  separator it collides with ordinary alphanumeric tokens. Product strings
-  shaped like a postcode (``M2 1TB`` for an SSD, ``A4 2PK``, ``PS5 1TB``) are
-  held off by requiring the outward letters to be one of the postcode areas
-  Royal Mail lists — the inward-letter rule alone still admits ``M2 1TB``.
-  ``GIR 0AA`` is the one three-letter outward code and is accepted as-is.
+- UK postcode (``address``): ``NW1 6XE`` / ``EC1A 1BB``, uppercase, spaced
+  (compact ``NW16XE`` collides with ordinary tokens). The outward letters must
+  be a Royal Mail area, which rejects ``A4 2PK`` / ``PS5 1TB``.
 - Street address (``address``): street name + house number per pack. ``nl``: a
   capitalized word ending in ``straat``/``str.``/``laan``/``weg``/``gracht``/…
   then the number (``Kerkstraat 12``), ``Grote``/``Oude``/``Nieuwe``/… before
@@ -1070,49 +1064,27 @@ def _scrub_nl_postcode(text: str) -> tuple[str, int]:
 
 nl_postcode_detector = Detector(type="address", scrub=_scrub_nl_postcode)
 
-# The six legal outward shapes: A9, A99, A9A, AA9, AA99, AA9A. The issue's
-# sketch ``[A-Z]{1,2}[0-9][A-Z0-9]?`` also admits ``A99A`` and ``AA99A``, which
-# Royal Mail does not issue. ``[0-9]`` rather than ``\d``: ``\d`` is Unicode in
-# Python and Rust but ASCII in JS, so it would mask ``NW1 ٦XE`` in two backends
-# and not the third.
-_UK_POSTCODE_OUTWARD = r"(?:[A-Z][0-9](?:[A-Z]|[0-9])?|[A-Z]{2}[0-9](?:[A-Z]|[0-9])?)"
-_UK_POSTCODE_INWARD = r"[0-9][ABD-HJLNP-UW-Z]{2}"
-# Any whitespace run, as the NL postcode and street detectors take: a postcode
-# pasted from HTML carries a no-break space and would otherwise leak.
-_UK_POSTCODE_SEP = r"[ \t\u00a0\u202f]+"
-# ``GIR 0AA`` is the only outward code with three letters.
-_UK_POSTCODE_NON_GEOGRAPHIC = ("GIR",)
-# 124 real postcode areas plus ``QC``, which Royal Mail lists as non-geographic
-# (awarding bodies). Requiring a listed area is the guard that keeps ``A4 2PK``
-# and ``PS5 1TB`` from matching; ``M2 1TB`` (an SSD) still does, since it is a
-# well-formed postcode and no context-free rule separates the two. Recall comes
-# first in this repo, so that trade is accepted and the case is recorded in
-# ``AMBIGUOUS``.
+# Outward A9, A99, A9A, AA9, AA99, AA9A, or GIR; inward 9AA. ``[0-9]`` not
+# ``\d``: JS ``\d`` is ASCII-only, Python's is not.
+UK_POSTCODE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR)[ \t\u00a0\u202f]+"
+    r"[0-9][ABD-HJLNP-UW-Z]{2}(?![A-Za-z0-9])"
+)
+# Royal Mail postcode areas, plus non-geographic QC and GIR. ``M2 1TB`` (an SSD)
+# still passes; see ``AMBIGUOUS`` in eval/generators.py.
 _UK_POSTCODE_AREAS = frozenset(
     """
     AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH
     DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE
     KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH
     PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR
-    TS TW UB W WA WC WD WF WN WR WS WV YO ZE
+    TS TW UB W WA WC WD WF WN WR WS WV YO ZE GIR
     """.split()
 )
-UK_POSTCODE_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?:{_UK_POSTCODE_OUTWARD}|{'|'.join(_UK_POSTCODE_NON_GEOGRAPHIC)})"
-    rf"{_UK_POSTCODE_SEP}{_UK_POSTCODE_INWARD}(?![A-Za-z0-9])"
-)
-_UK_POSTCODE_AREA_RE = re.compile(r"[A-Z]+")
 
 
 def _uk_postcode_valid(value: str) -> bool:
-    """Accept when the outward letters name a real postcode area."""
-    match = _UK_POSTCODE_AREA_RE.match(value)
-    if match is None:
-        return False
-    area = match.group(0)
-    if area in _UK_POSTCODE_NON_GEOGRAPHIC:
-        return True
-    return area in _UK_POSTCODE_AREAS
+    return re.match(r"[A-Z]+", value)[0] in _UK_POSTCODE_AREAS
 
 
 def _scrub_uk_postcode(text: str) -> tuple[str, int]:

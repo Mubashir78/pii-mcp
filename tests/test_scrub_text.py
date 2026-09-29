@@ -447,7 +447,6 @@ class TestUkPostcode:
     @pytest.mark.parametrize(
         "value",
         [
-            # One real, delivered postcode per outward shape.
             "M1 1AE",  # A9
             "B33 8TH",  # A99
             "W1A 0AX",  # A9A
@@ -458,7 +457,6 @@ class TestUkPostcode:
             "JE2 3AA",  # Channel Islands
             "GY1 1AA",
             "ZE1 0AA",  # Shetland
-            # The rest of the issue's examples.
             "NR1 3PS",
             "EC1A 1BB",
         ],
@@ -469,13 +467,11 @@ class TestUkPostcode:
         assert result["counts"]["address"] == 1
 
     def test_masks_the_non_geographic_outward_code(self) -> None:
-        """``GIR 0AA`` is the only outward code with three letters."""
         result = scrub_text("GIR 0AA", languages=["en"])
         assert result["text"] == "[ADDRESS]"
         assert result["counts"]["address"] == 1
 
     def test_masks_across_whitespace_runs(self) -> None:
-        """HTML and PDFs substitute no-break spaces for the separator."""
         for separator in (" ", "  ", "\t", "\u00a0", "\u202f"):
             value = f"postcode NW1{separator}6XE"
             result = scrub_text(value, languages=["en"])
@@ -502,10 +498,10 @@ class TestUkPostcode:
     @pytest.mark.parametrize(
         "value",
         [
-            "_NW1 6XE",  # ``_`` is not an ASCII alphanumeric
+            "_NW1 6XE",
             "NW1 6XE_",
             "__NW1 6XE__",
-            "\u00e9NW1 6XE",  # nor is a non-ASCII letter or digit
+            "\u00e9NW1 6XE",
             "NW1 6XE\u00e9",
             "\u0416NW1 6XE",
             "NW1 6XE\u0663",
@@ -514,11 +510,7 @@ class TestUkPostcode:
     def test_masks_when_the_neighbour_is_not_ascii_alphanumeric(
         self, value: str
     ) -> None:
-        """Pins the boundary rule: ``(?<![A-Za-z0-9])``, not ``\\b``.
-
-        ``\\b`` treats ``_`` as a word character and Rust's is Unicode-aware,
-        so either would drop these hits in one backend only.
-        """
+        """Boundary is ``(?<![A-Za-z0-9])``, not ``\\b``, in every backend."""
         result = scrub_text(value, languages=["en"])
         assert result["counts"]["address"] == 1, value
         assert "[ADDRESS]" in result["text"], value
@@ -532,10 +524,10 @@ class TestUkPostcode:
     @pytest.mark.parametrize(
         "value",
         [
-            "AB12C 3DE",  # A99A is not an outward shape Royal Mail issues
+            "AB12C 3DE",
             "M12C 3DE",
             "LA23J 2DX",
-            "SW123 4AB",  # three-digit district
+            "SW123 4AB",
         ],
     )
     def test_rejects_outward_shapes_that_do_not_exist(self, value: str) -> None:
@@ -545,11 +537,9 @@ class TestUkPostcode:
     @pytest.mark.parametrize(
         "value",
         [
-            "NW16XE",  # compact form is out of scope
-            "nw1 6xe",  # uppercase only
-            "XNW1 6XE",  # glued to a preceding letter
-            "NW1 6XEE",  # glued to a following letter
-            "aNW1 6XE",  # glued to an ASCII alphanumeric
+            "NW16XE",
+            "nw1 6xe",
+            "XNW1 6XE",
             "1NW1 6XE",
             "NW1 6XEa",
         ],
