@@ -443,6 +443,127 @@ class TestNlPostcode:
         assert result["counts"]["address"] == 0
 
 
+class TestUkPostcode:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            # One real, delivered postcode per outward shape.
+            "M1 1AE",  # A9
+            "B33 8TH",  # A99
+            "W1A 0AX",  # A9A
+            "SW1A 1AA",  # AA9A
+            "NW1 6XE",  # AA9
+            "GU30 7RS",  # AA99
+            "E1W 1AA",  # AA9A
+            "JE2 3AA",  # Channel Islands
+            "GY1 1AA",
+            "ZE1 0AA",  # Shetland
+            # The rest of the issue's examples.
+            "NR1 3PS",
+            "EC1A 1BB",
+        ],
+    )
+    def test_masks_every_outward_shape(self, value: str) -> None:
+        result = scrub_text(f"postcode {value}", languages=["en"])
+        assert result["text"] == "postcode [ADDRESS]"
+        assert result["counts"]["address"] == 1
+
+    def test_masks_the_non_geographic_outward_code(self) -> None:
+        """``GIR 0AA`` is the only outward code with three letters."""
+        result = scrub_text("GIR 0AA", languages=["en"])
+        assert result["text"] == "[ADDRESS]"
+        assert result["counts"]["address"] == 1
+
+    def test_masks_across_whitespace_runs(self) -> None:
+        """HTML and PDFs substitute no-break spaces for the separator."""
+        for separator in (" ", "  ", "\t", "\u00a0", "\u202f"):
+            value = f"postcode NW1{separator}6XE"
+            result = scrub_text(value, languages=["en"])
+            assert result["text"] == "postcode [ADDRESS]", repr(separator)
+            assert result["counts"]["address"] == 1, repr(separator)
+
+    def test_masks_postcode_after_a_street_address(self) -> None:
+        result = scrub_text(
+            "Ship to 221B Baker Street, London NW1 6XE", languages=["en"]
+        )
+        assert result["text"] == "Ship to [ADDRESS], London [ADDRESS]"
+        assert result["counts"]["address"] == 2
+
+    def test_masks_inside_json(self) -> None:
+        result = scrub_text(
+            '{"postcode": "EC1A 1BB", "city": "London"}', languages=["en"]
+        )
+        assert result["text"] == '{"postcode": "[ADDRESS]", "city": "London"}'
+
+    def test_masks_inside_csv(self) -> None:
+        result = scrub_text("id,SW1A 1AA,2024-01-15,active", languages=["en"])
+        assert result["text"] == "id,[ADDRESS],2024-01-15,active"
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "_NW1 6XE",  # ``_`` is not an ASCII alphanumeric
+            "NW1 6XE_",
+            "__NW1 6XE__",
+            "\u00e9NW1 6XE",  # nor is a non-ASCII letter or digit
+            "NW1 6XE\u00e9",
+            "\u0416NW1 6XE",
+            "NW1 6XE\u0663",
+        ],
+    )
+    def test_masks_when_the_neighbour_is_not_ascii_alphanumeric(
+        self, value: str
+    ) -> None:
+        """Pins the boundary rule: ``(?<![A-Za-z0-9])``, not ``\\b``.
+
+        ``\\b`` treats ``_`` as a word character and Rust's is Unicode-aware,
+        so either would drop these hits in one backend only.
+        """
+        result = scrub_text(value, languages=["en"])
+        assert result["counts"]["address"] == 1, value
+        assert "[ADDRESS]" in result["text"], value
+
+    @pytest.mark.parametrize("value", ["A4 2PK", "PS5 1TB", "A1 2PK"])
+    def test_rejects_areas_that_do_not_exist(self, value: str) -> None:
+        result = scrub_text(f"part {value} in stock", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+        assert value in result["text"]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "AB12C 3DE",  # A99A is not an outward shape Royal Mail issues
+            "M12C 3DE",
+            "LA23J 2DX",
+            "SW123 4AB",  # three-digit district
+        ],
+    )
+    def test_rejects_outward_shapes_that_do_not_exist(self, value: str) -> None:
+        result = scrub_text(f"order {value} shipped", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "NW16XE",  # compact form is out of scope
+            "nw1 6xe",  # uppercase only
+            "XNW1 6XE",  # glued to a preceding letter
+            "NW1 6XEE",  # glued to a following letter
+            "aNW1 6XE",  # glued to an ASCII alphanumeric
+            "1NW1 6XE",
+            "NW1 6XEa",
+        ],
+    )
+    def test_ignores_out_of_scope_shapes(self, value: str) -> None:
+        result = scrub_text(f"ref {value} end", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+
+    def test_disabled_without_en(self) -> None:
+        result = scrub_text("postcode NW1 6XE", languages=["nl"])
+        assert result["text"] == "postcode NW1 6XE"
+        assert result["counts"]["address"] == 0
+
+
 class TestStreetAddress:
     @pytest.mark.parametrize(
         ("text", "lang", "expected"),
