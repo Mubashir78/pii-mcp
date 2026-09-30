@@ -8,7 +8,7 @@ All examples use fictional test data (`ada@example.com`, documented test IBAN `N
 
 - **[`fastmcp_server.py`](fastmcp_server.py)**: Minimal FastMCP server with `PiiScrubMiddleware` attached to automatically redact PII from tool results.
   ```bash
-  fastmcp dev examples/fastmcp_server.py
+  fastmcp dev inspector examples/fastmcp_server.py
   # or inspect with the MCP Inspector:
   npx @modelcontextprotocol/inspector fastmcp run examples/fastmcp_server.py
   ```
@@ -18,7 +18,7 @@ All examples use fictional test data (`ada@example.com`, documented test IBAN `N
   python examples/scrub_payload.py
   ```
 
-- **[`node/scrub.mjs`](node/scrub.mjs)**: Masks sensitive fields in a structured JSON payload using the Node.js / TypeScript package (`scrubPayload`).
+- **[`node/scrub.mjs`](node/scrub.mjs)**: Masks sensitive fields in a structured JSON payload using the Node.js / TypeScript package (`scrubPayload`). When running from a repository checkout without `pii-mcp` installed, build the package first with `(cd typescript && npm install && npm run build)`.
   ```bash
   node examples/node/scrub.mjs
   ```

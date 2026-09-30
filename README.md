@@ -25,7 +25,6 @@ scrub_text(
 
 For runnable scripts including a FastMCP server and payload scrubbing, see the [`examples/`](examples/) directory.
 
-
 ## Install
 
 ```bash

@@ -4,7 +4,7 @@ Prerequisites:
     pip install "pii-mcp[fastmcp]"
 
 Run the server with the FastMCP CLI:
-    fastmcp dev examples/fastmcp_server.py
+    fastmcp dev inspector examples/fastmcp_server.py
 
 Or inspect and call tools interactively with the MCP Inspector:
     npx @modelcontextprotocol/inspector fastmcp run examples/fastmcp_server.py
@@ -16,14 +16,17 @@ before leaving the server.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# Allow running directly from repository checkout
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
 from fastmcp import FastMCP
-from pii_mcp.fastmcp import PiiScrubMiddleware
+
+try:
+    from pii_mcp.fastmcp import PiiScrubMiddleware
+except ModuleNotFoundError:
+    # Allow running directly from repository checkout without prior installation
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from pii_mcp.fastmcp import PiiScrubMiddleware
 
 mcp = FastMCP("CustomerService")
 mcp.add_middleware(PiiScrubMiddleware())  # scrubs universal + nl/en pattern PII

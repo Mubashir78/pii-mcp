@@ -85,4 +85,3 @@ usingNative(); // true when the napi addon is active
 ```
 
 For a runnable Node example, see [`examples/node/`](../examples/node/).
-
