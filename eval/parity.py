@@ -5,18 +5,26 @@
 Inputs splice generated PII, clean values, and random separator noise so
 boundary handling is exercised. Exit status 1 on any mismatch. Person names
 are left out: they need the NER pass, which only the native backend has.
+
+``pii_mcp`` is imported from wherever it resolves first: an installed wheel in
+CI, or ``src`` in a checkout that has not been installed. The repo source is
+only put on the path when no installed package is importable, so a run in the
+wheel job compares the Rust extension in that wheel rather than the checkout.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import random
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "eval"))
+
+if importlib.util.find_spec("pii_mcp") is None:
+    sys.path.insert(0, str(ROOT / "src"))
 
 from generators import CLEAN, PII  # noqa: E402
 

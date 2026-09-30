@@ -140,6 +140,14 @@ jobs:
           PII_MCP_BACKEND: native
         run: pytest -q -o pythonpath=
 
+      - name: Python and Rust agree (parity)
+        # ``eval/parity.py`` masks 20000 generated inputs with both backends and
+        # exits 1 on any mismatch. It imports ``pii_mcp`` from the wheel
+        # installed above rather than the checkout, so this compares the Rust
+        # extension that ships. Every detector change has to land in both
+        # backends by hand, and nothing else in CI would notice them drifting.
+        run: python eval/parity.py
+
   test-typescript:
     name: TypeScript (Node 22 + napi)
     if: ${{ !github.event.pull_request.draft }}
