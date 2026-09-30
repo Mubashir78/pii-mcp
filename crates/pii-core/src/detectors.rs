@@ -883,6 +883,8 @@ fn location_re() -> &'static Regex {
     })
 }
 
+
+
 fn location_boundary_ok(text: &str, start: usize, end: usize) -> bool {
     if start > 0 {
         let prev = text[..start].chars().next_back().unwrap();
@@ -1074,7 +1076,8 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
             // ``°`` (``4.904152°22``); the linear regex keeps them. Only a
             // failed right edge backtracks: the tails never change a number,
             // so a validity reject stays a reject.
-            let shorter = if location_boundary_ok(text, start, end) {
+            let right_edge_ok = location_boundary_ok(text, start, end);
+            let shorter = if right_edge_ok {
                 None
             } else {
                 let mut value = m.as_str();
@@ -1092,7 +1095,13 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
                     .filter(|&e| location_valid(&text[start..e]))
             };
             let Some(e) = shorter else {
-                pos = start + 1;
+                // A rejected *validity* is a reject, exactly as in Python:
+                // resume after the match. Restarting at ``start + 1`` instead
+                // finds overlapping windows the Python scan never produces
+                // (``0.5741, -0.9633,-37.45816`` also matches from the second
+                // number, ``-0.9633,-37.45816``, whose components are not a
+                // real pair), and masks the wrong span.
+                pos = if right_edge_ok { end.max(start + 1) } else { start + 1 };
                 continue;
             };
             end = e;
