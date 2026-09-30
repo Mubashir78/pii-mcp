@@ -15,14 +15,15 @@
  * (when any pack is active, before national IDs so ``+31(0)6…`` is not eaten by
  * SSN) → locale phone forms (before BSN takes the subscriber part of
  * ``040 78703244``) → checksum/rule-backed national IDs (DE IdNr before BSN,
- * BSN before SSN when both packs are on; NL BTW before BSN, passport after) →
- * street + house number per pack (en, de, nl) → postcode per pack → kenteken
- * when ``nl``.
+ * BSN before SSN when both packs are on, US ITIN before SSN; NL BTW before
+ * BSN, passport after) → street + house number per pack (en, de, nl) →
+ * postcode per pack → kenteken when ``nl``.
  */
 
 import {
   UNIVERSAL_DETECTORS,
   bsnDetector,
+  itinDetector,
   nlLicensePlateDetector,
   nlPassportDetector,
   nlPostcodeDetector,
@@ -122,7 +123,7 @@ function detectorsFor(
     pack.push(nlVatDetector, bsnDetector, nlPassportDetector);
   }
   if (langs.includes("en")) {
-    pack.push(ssnDetector, streetEnDetector, ukPostcodeDetector);
+    pack.push(itinDetector, ssnDetector, streetEnDetector, ukPostcodeDetector);
   }
   if (langs.includes("de")) {
     pack.push(streetDeDetector);
