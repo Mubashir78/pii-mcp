@@ -2,11 +2,11 @@
  * Language packs and scrub walk for pattern-based detectors.
  *
  * Universal detectors (email, IBAN, credit card, BIC, MAC, IMEI, IP, location)
- * always run. Locale packs add national IDs / phone shapes / NL postcodes /
- * kentekens / BTW-ids / passport numbers. Counts always include every
- * ``PiiType`` key (0 when unused), including ``person`` (filled only by the
- * optional Rust NER pass). ``address`` counts street + house number hits and
- * NL postcodes.
+ * always run. Locale packs add national IDs / phone shapes / NL and UK
+ * postcodes / kentekens / BTW-ids / passport numbers. Counts always include
+ * every ``PiiType`` key (0 when unused), including ``person`` (filled only by
+ * the optional Rust NER pass). ``address`` counts street + house number hits
+ * and NL / UK postcodes.
  *
  * ``MAX_SCRUB_BYTES`` matches foro-proxy (32 MiB). Oversize raises
  * ``PiiScrubError`` so callers withhold rather than forward unscrubbed text.
@@ -16,8 +16,8 @@
  * SSN) → locale phone forms (before BSN takes the subscriber part of
  * ``040 78703244``) → checksum/rule-backed national IDs (DE IdNr before BSN,
  * BSN before SSN when both packs are on; NL BTW before BSN, passport after) →
- * street + house number per pack (en, de, nl) → NL postcode / kenteken when
- * ``nl``.
+ * street + house number per pack (en, de, nl) → postcode per pack → kenteken
+ * when ``nl``.
  */
 
 import {
@@ -36,6 +36,7 @@ import {
   streetEnDetector,
   streetNlDetector,
   taxIdDetector,
+  ukPostcodeDetector,
   type Detector,
 } from "./detectors.js";
 import {
@@ -121,7 +122,7 @@ function detectorsFor(
     pack.push(nlVatDetector, bsnDetector, nlPassportDetector);
   }
   if (langs.includes("en")) {
-    pack.push(ssnDetector, streetEnDetector);
+    pack.push(ssnDetector, streetEnDetector, ukPostcodeDetector);
   }
   if (langs.includes("de")) {
     pack.push(streetDeDetector);

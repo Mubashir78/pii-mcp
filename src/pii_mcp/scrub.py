@@ -1,12 +1,12 @@
 """Language packs and scrub walk for pattern-based detectors.
 
 Universal detectors (email, IBAN, credit card, BIC, MAC, IMEI, IP, location)
-always run. Locale packs add national IDs / phone shapes / NL postcodes /
+always run. Locale packs add national IDs / phone shapes / NL and UK postcodes /
 kentekens / BTW-ids / passport numbers. Counts always include every
 ``PiiType`` key (0 when unused). ``person`` is filled only by ``ner=True``,
 which runs a person-name NER pass after the pattern detectors and needs the
 native extension built with the ``ner`` feature (see the README).
-``address`` counts street + house number hits and NL postcodes.
+``address`` counts street + house number hits and NL / UK postcodes.
 
 ``MAX_SCRUB_BYTES`` matches foro-proxy (32 MiB). Oversize raises
 ``PiiScrubError`` so callers withhold rather than forward unscrubbed text.
@@ -16,8 +16,8 @@ Detector pack order (see ``_detectors_for``): universal → international phone
 SSN) → locale phone forms (before BSN takes the subscriber part of
 ``040 78703244``) → checksum/rule-backed national IDs (DE IdNr before BSN,
 BSN before SSN when both packs are on; NL BTW before BSN, passport after) →
-street + house number per pack (en, de, nl) → NL postcode / kenteken when
-``nl``.
+street + house number per pack (en, de, nl) → postcode per pack → kenteken
+when ``nl``.
 
 Optional Rust acceleration: when ``pii_mcp._native`` is importable (shipped in
 platform wheels, or built via maturin), ``scrub_text`` / ``scrub_payload``
@@ -50,6 +50,7 @@ from pii_mcp.detectors import (
     street_en_detector,
     street_nl_detector,
     tax_id_detector,
+    uk_postcode_detector,
 )
 
 PiiType = Literal[
@@ -207,6 +208,7 @@ def _detectors_for(languages: Sequence[str] | None) -> tuple[Detector, ...]:
     if "en" in langs:
         pack.append(ssn_detector)
         pack.append(street_en_detector)
+        pack.append(uk_postcode_detector)
     if "de" in langs:
         pack.append(street_de_detector)
     if "nl" in langs:

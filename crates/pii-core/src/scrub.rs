@@ -1,8 +1,9 @@
 //! Language packs and scrub walk for pattern-based detectors.
 //!
 //! Universal detectors always run. Locale packs add national IDs / phones /
-//! street addresses / NL postcodes. Counts always include every [`PiiType`]
-//! key (0 when unused); `person` is filled only by the `ner` feature.
+//! street addresses / NL and UK postcodes. Counts always include every
+//! [`PiiType`] key (0 when unused); `person` is filled only by the `ner`
+//! feature.
 
 use crate::detectors::{detectors_for, PiiCategory};
 use std::borrow::Cow;
@@ -476,6 +477,94 @@ mod tests {
         let langs = vec!["en".to_string()];
         let r = scrub_text("BSN 100000009 on file", Some(&langs), true, false).unwrap();
         assert_eq!(r.counts["bsn"], 0);
+    }
+
+    #[test]
+    fn masks_uk_postcode_in_every_outward_shape() {
+        let langs = vec!["en".to_string()];
+        for value in [
+            "M1 1AE", "B33 8TH", "W1A 0AX", "SW1A 1AA", "NW1 6XE", "GU30 7RS", "E1W 1AA",
+            "JE2 3AA", "GY1 1AA", "ZE1 0AA", "NR1 3PS", "EC1A 1BB",
+        ] {
+            let r = scrub_text(&format!("postcode {value}"), Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, "postcode [ADDRESS]", "{value}");
+            assert_eq!(r.counts["address"], 1, "{value}");
+        }
+    }
+
+    #[test]
+    fn masks_uk_postcode_across_whitespace_runs() {
+        let langs = vec!["en".to_string()];
+        for separator in [" ", "  ", "\t", "\u{a0}", "\u{202f}"] {
+            let text = format!("postcode NW1{separator}6XE");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, "postcode [ADDRESS]", "{separator:?}");
+            assert_eq!(r.counts["address"], 1, "{separator:?}");
+        }
+    }
+
+    #[test]
+    fn masks_uk_postcode_after_a_street_address() {
+        let langs = vec!["en".to_string()];
+        let r = scrub_text(
+            "Ship to 221B Baker Street, London NW1 6XE",
+            Some(&langs),
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(r.text, "Ship to [ADDRESS], London [ADDRESS]");
+        assert_eq!(r.counts["address"], 2);
+    }
+
+    #[test]
+    fn rejects_uk_postcode_areas_that_do_not_exist() {
+        let langs = vec!["en".to_string()];
+        for value in ["A4 2PK", "PS5 1TB", "A1 2PK"] {
+            let text = format!("part {value} in stock");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, text, "{value}");
+            assert_eq!(r.counts["address"], 0, "{value}");
+        }
+    }
+
+    #[test]
+    fn rejects_uk_outward_shapes_that_do_not_exist() {
+        let langs = vec!["en".to_string()];
+        for value in ["AB12C 3DE", "M12C 3DE", "LA23J 2DX", "SW123 4AB"] {
+            let text = format!("order {value} shipped");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.counts["address"], 0, "{value}");
+        }
+    }
+
+    #[test]
+    fn uk_postcode_needs_the_en_pack() {
+        let langs = vec!["nl".to_string()];
+        let r = scrub_text("postcode NW1 6XE", Some(&langs), true, false).unwrap();
+        assert_eq!(r.text, "postcode NW1 6XE");
+        assert_eq!(r.counts["address"], 0);
+    }
+
+    #[test]
+    fn uk_postcode_boundaries_are_ascii_alphanumeric_only() {
+        // Python's ``(?<![A-Za-z0-9])…(?![A-Za-z0-9])``, not a Unicode ``\b``.
+        let langs = vec!["en".to_string()];
+        for (text, expected) in [
+            ("_NW1 6XE", "_[ADDRESS]"),
+            ("NW1 6XE_", "[ADDRESS]_"),
+            ("__NW1 6XE__", "__[ADDRESS]__"),
+            ("\u{e9}NW1 6XE", "\u{e9}[ADDRESS]"),
+            ("NW1 6XE\u{e9}", "[ADDRESS]\u{e9}"),
+            ("\u{416}NW1 6XE", "\u{416}[ADDRESS]"),
+            ("NW1 6XE\u{663}", "[ADDRESS]\u{663}"),
+            ("aNW1 6XE", "aNW1 6XE"),
+            ("1NW1 6XE", "1NW1 6XE"),
+            ("NW1 6XEa", "NW1 6XEa"),
+        ] {
+            let r = scrub_text(text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, expected, "{text:?}");
+        }
     }
 
     #[cfg(not(feature = "ner"))]
