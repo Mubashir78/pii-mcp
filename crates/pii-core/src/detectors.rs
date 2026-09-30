@@ -5,7 +5,8 @@
 
 use crate::checksum::{
     bsn_valid_grouped, iban_valid, imei_valid, is_group_sep, luhn_valid, nl_passport_valid,
-    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, GROUP_DASHES, GROUP_SPACES,
+    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, uk_postcode_valid, GROUP_DASHES,
+    GROUP_SPACES,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -1073,7 +1074,8 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
             // ``°`` (``4.904152°22``); the linear regex keeps them. Only a
             // failed right edge backtracks: the tails never change a number,
             // so a validity reject stays a reject.
-            let shorter = if location_boundary_ok(text, start, end) {
+            let right_edge_ok = location_boundary_ok(text, start, end);
+            let shorter = if right_edge_ok {
                 None
             } else {
                 let mut value = m.as_str();
@@ -1091,7 +1093,8 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
                     .filter(|&e| location_valid(&text[start..e]))
             };
             let Some(e) = shorter else {
-                pos = start + 1;
+                // A validity reject resumes at the match end, as Python does.
+                pos = if right_edge_ok { end.max(start + 1) } else { start + 1 };
                 continue;
             };
             end = e;
@@ -1716,6 +1719,43 @@ fn scrub_nl_postcode(text: &str) -> (Option<String>, u32) {
     )
 }
 
+/// Outward shapes A9, A99, A9A, AA9, AA99, AA9A, or `GIR`; inward 9AA.
+fn uk_postcode_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR)[ \t\u{a0}\u{202f}]+[0-9][ABD-HJLNP-UW-Z]{2}")
+            .unwrap()
+    })
+}
+
+/// ``(?<![A-Za-z0-9])…(?![A-Za-z0-9])``; unlike ``\b``, `_` and non-ASCII
+/// letters are boundaries.
+fn uk_postcode_boundary_ok(text: &str, start: usize, end: usize) -> bool {
+    if start > 0 {
+        let prev = text[..start].chars().next_back().unwrap();
+        if prev.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    if end < text.len() {
+        let next = text[end..].chars().next().unwrap();
+        if next.is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    true
+}
+
+fn scrub_uk_postcode(text: &str) -> (Option<String>, u32) {
+    replace_matches(
+        text,
+        uk_postcode_re(),
+        "[ADDRESS]",
+        |v, s, e| uk_postcode_boundary_ok(text, s, e) && uk_postcode_valid(v),
+        false,
+    )
+}
+
 const STREET_UP: &str = r"A-Z\u00c0-\u00d6\u00d8-\u00de";
 const STREET_LOW: &str = r"a-z\u00df-\u00f6\u00f8-\u017f";
 const HOUSE_NUMBER: &str = r"[1-9][0-9]{0,4}[A-Za-z]{0,3}(?:[-/][0-9]{1,4}[A-Za-z]?)?(?-u:\b)";
@@ -1965,6 +2005,10 @@ fn build_detectors(mask: u8) -> Vec<Detector> {
         pack.push(Detector {
             category: PiiCategory::Address,
             scrub: scrub_street_en,
+        });
+        pack.push(Detector {
+            category: PiiCategory::Address,
+            scrub: scrub_uk_postcode,
         });
     }
     if has_de {

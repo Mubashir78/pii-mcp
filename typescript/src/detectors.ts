@@ -49,6 +49,9 @@
  *   — national identificatienummer alongside BSN; format only, no check digit.
  * - NL postcode (``address``): ``1234 AB`` / ``1234AB`` with uppercase letters
  *   only and SA/SD/SS rejects — structured fragment, not street-address NER.
+ * - UK postcode (``address``): ``NW1 6XE`` / ``EC1A 1BB``, uppercase, spaced
+ *   (compact ``NW16XE`` collides with ordinary tokens). The outward letters
+ *   must be a Royal Mail area, which rejects ``A4 2PK`` / ``PS5 1TB``.
  * - Street address (``address``): street name + house number per pack. ``nl``:
  *   a capitalized word ending in
  *   ``straat``/``str.``/``laan``/``weg``/``gracht``/… then the number
@@ -441,13 +444,13 @@ function ibanAcceptLen(value: string): number {
 function scrubIban(text: string): { text: string; count: number } {
   let out = text.replace(INVISIBLE, "");
   let count = 0;
-  for (const pattern of IBAN_RES) {
+  for (const [index, pattern] of IBAN_RES.entries()) {
     const result = replaceMatches(
       out,
       pattern,
       "[IBAN]",
       undefined,
-      false,
+      index === 0 || index === 3 || index === 4,
       (full, start, end) => start + ibanAcceptLen(full.slice(start, end)),
     );
     out = result.text;
@@ -1128,6 +1131,33 @@ function scrubNlPostcode(text: string): { text: string; count: number } {
 export const nlPostcodeDetector: Detector = {
   type: "address",
   scrub: scrubNlPostcode,
+};
+
+// Outward A9, A99, A9A, AA9, AA99, AA9A, or GIR; inward 9AA.
+const UK_POSTCODE_RE =
+  /(?<![A-Za-z0-9])(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR)[ \t\u00a0\u202f]+[0-9][ABD-HJLNP-UW-Z]{2}(?![A-Za-z0-9])/g;
+// Royal Mail postcode areas, plus non-geographic QC and GIR.
+const UK_POSTCODE_AREAS = new Set(
+  (
+    "AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH " +
+    "DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE " +
+    "KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH " +
+    "PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR " +
+    "TS TW UB W WA WC WD WF WN WR WS WV YO ZE GIR"
+  ).split(" "),
+);
+
+function ukPostcodeValid(value: string): boolean {
+  return UK_POSTCODE_AREAS.has(/^[A-Z]+/.exec(value)![0]);
+}
+
+function scrubUkPostcode(text: string): { text: string; count: number } {
+  return replaceMatches(text, UK_POSTCODE_RE, "[ADDRESS]", ukPostcodeValid);
+}
+
+export const ukPostcodeDetector: Detector = {
+  type: "address",
+  scrub: scrubUkPostcode,
 };
 
 const STREET_UP = String.raw`A-Z\u00c0-\u00d6\u00d8-\u00de`;

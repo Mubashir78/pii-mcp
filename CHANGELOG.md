@@ -1,3 +1,23 @@
+## [1.8.1](https://github.com/foro-sh/pii-mcp/compare/v1.8.0...v1.8.1) (2026-09-30)
+
+### Bug Fixes
+
+* make the Python and Rust backends agree on three inputs ([386160b](https://github.com/foro-sh/pii-mcp/commit/386160b848b50eb5f41c0b43d542388126dfa37f))
+* **typescript:** retry rejected IBAN candidates like Python and Rust ([532eecc](https://github.com/foro-sh/pii-mcp/commit/532eecc6e52e2ce8cf9a41bf22ed091ca9819579))
+
+## [1.8.0](https://github.com/foro-sh/pii-mcp/compare/v1.7.1...v1.8.0) (2026-09-29)
+
+### Features
+
+* merge UK postcode detector for the en pack ([#70](https://github.com/foro-sh/pii-mcp/issues/70)) ([7287407](https://github.com/foro-sh/pii-mcp/commit/72874077b2e63354a4f138c71033ec0a2e848b52)), closes [#58](https://github.com/foro-sh/pii-mcp/issues/58)
+* **python:** add a UK postcode detector to the en pack ([f38eb65](https://github.com/foro-sh/pii-mcp/commit/f38eb65179be4a96b6e20f421ad213812235be7a))
+* **rust:** mirror the UK postcode detector in pii-core ([0cb7da7](https://github.com/foro-sh/pii-mcp/commit/0cb7da7a9de411efa286503a939d84f7f0533597))
+* **typescript:** mirror the UK postcode detector in the js backend ([0027539](https://github.com/foro-sh/pii-mcp/commit/0027539d4778e30f9d03bac1573f918579ebca6d))
+
+### Bug Fixes
+
+* **rust:** keep uk_postcode_valid crate-private ([be1fb51](https://github.com/foro-sh/pii-mcp/commit/be1fb51792af75260984fd6f2400237c254227e7))
+
 ## [1.7.1](https://github.com/foro-sh/pii-mcp/compare/v1.7.0...v1.7.1) (2026-09-28)
 
 ### Bug Fixes

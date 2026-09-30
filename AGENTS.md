@@ -60,3 +60,12 @@ For how changes get integrated — commit everything, group into reviewed PRs by
 concern, self-review and commit fixes, and **ask before merging** — follow the
 `committing-and-pr-workflow` skill under `.agents/skills/`. Never merge a PR
 without explicit approval.
+
+## Comments
+
+Don't write comments unless they are really necessary. Code should explain
+itself; add a comment only when the code would not make sense without it
+(it looks wrong but isn't). API contracts, invariants and the "why" behind a
+detector go in docstrings, not `#` / `//` comments above a branch or regex.
+Never narrate what the next lines do. Reviewers flag unneeded comments as a
+finding. Details and examples: `.cursor/rules/docstrings-over-comments.mdc`.

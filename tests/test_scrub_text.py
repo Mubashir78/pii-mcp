@@ -93,6 +93,24 @@ class TestIban:
         assert result["counts"]["iban"] == 1
         assert result["counts"]["phone"] == 0
 
+    def test_masks_iban_inside_a_rejected_candidate(self) -> None:
+        """A greedy prefix that fails the checksum must not swallow the IBAN.
+
+        The compact pattern starts at the hex digit before ``NL`` and yields
+        ``bc4545667033NL09BSLW5753882578``, whose country code ``bc`` is not in
+        the registry. Resuming at that match's end steps over the real IBAN
+        starting eight characters inside it.
+        """
+        result = scrub_text("18:c0:50:92:da:be4+4bc4545667033NL09BSLW5753882578")
+        assert result["text"] == "18:c0:50:92:da:be4+4bc4545667033[IBAN]"
+        assert result["counts"]["iban"] == 1
+
+    def test_masks_iban_after_a_pseudo_country_code(self) -> None:
+        """Same shape with a passport-looking run in front of the real IBAN."""
+        result = scrub_text("ac@LG180UU07GB89IWQY91132044634700")
+        assert result["text"] == "ac@[PASSPORT][IBAN]"
+        assert result["counts"]["iban"] == 1
+
 
 class TestBic:
     def test_masks_8_char(self) -> None:
@@ -413,6 +431,19 @@ class TestLocation:
         result = scrub_text("versions 1.0, 2.0 shipped")
         assert result["counts"]["location"] == 0
 
+    def test_masks_the_first_valid_pair_not_the_leftmost(self) -> None:
+        """A rejected pair must not hand the scan an overlapping window.
+
+        ``0.5741, -0.9633`` is the leftmost match but both components are
+        within 1.0, so it is open ocean / an embedding vector. The scan
+        resumes after the rejected match, so the overlapping window
+        ``-0.9633,-37.45816`` is never considered and ``-37.45816,41.605875``
+        is masked.
+        """
+        result = scrub_text("scale 0.5741, -0.9633,-37.45816,41.605875")
+        assert result["text"] == "scale 0.5741, -0.9633,[LOCATION]"
+        assert result["counts"]["location"] == 1
+
 
 class TestNlPostcode:
     def test_masks_spaced(self) -> None:
@@ -440,6 +471,117 @@ class TestNlPostcode:
     def test_disabled_without_nl(self) -> None:
         result = scrub_text("woonachtig te 1012 AB Amsterdam", languages=["en"])
         assert result["text"] == "woonachtig te 1012 AB Amsterdam"
+        assert result["counts"]["address"] == 0
+
+
+class TestUkPostcode:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "M1 1AE",  # A9
+            "B33 8TH",  # A99
+            "W1A 0AX",  # A9A
+            "SW1A 1AA",  # AA9A
+            "NW1 6XE",  # AA9
+            "GU30 7RS",  # AA99
+            "E1W 1AA",  # AA9A
+            "JE2 3AA",  # Channel Islands
+            "GY1 1AA",
+            "ZE1 0AA",  # Shetland
+            "NR1 3PS",
+            "EC1A 1BB",
+        ],
+    )
+    def test_masks_every_outward_shape(self, value: str) -> None:
+        result = scrub_text(f"postcode {value}", languages=["en"])
+        assert result["text"] == "postcode [ADDRESS]"
+        assert result["counts"]["address"] == 1
+
+    def test_masks_the_non_geographic_outward_code(self) -> None:
+        result = scrub_text("GIR 0AA", languages=["en"])
+        assert result["text"] == "[ADDRESS]"
+        assert result["counts"]["address"] == 1
+
+    def test_masks_across_whitespace_runs(self) -> None:
+        for separator in (" ", "  ", "\t", "\u00a0", "\u202f"):
+            value = f"postcode NW1{separator}6XE"
+            result = scrub_text(value, languages=["en"])
+            assert result["text"] == "postcode [ADDRESS]", repr(separator)
+            assert result["counts"]["address"] == 1, repr(separator)
+
+    def test_masks_postcode_after_a_street_address(self) -> None:
+        result = scrub_text(
+            "Ship to 221B Baker Street, London NW1 6XE", languages=["en"]
+        )
+        assert result["text"] == "Ship to [ADDRESS], London [ADDRESS]"
+        assert result["counts"]["address"] == 2
+
+    def test_masks_inside_json(self) -> None:
+        result = scrub_text(
+            '{"postcode": "EC1A 1BB", "city": "London"}', languages=["en"]
+        )
+        assert result["text"] == '{"postcode": "[ADDRESS]", "city": "London"}'
+
+    def test_masks_inside_csv(self) -> None:
+        result = scrub_text("id,SW1A 1AA,2024-01-15,active", languages=["en"])
+        assert result["text"] == "id,[ADDRESS],2024-01-15,active"
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "_NW1 6XE",
+            "NW1 6XE_",
+            "__NW1 6XE__",
+            "\u00e9NW1 6XE",
+            "NW1 6XE\u00e9",
+            "\u0416NW1 6XE",
+            "NW1 6XE\u0663",
+        ],
+    )
+    def test_masks_when_the_neighbour_is_not_ascii_alphanumeric(
+        self, value: str
+    ) -> None:
+        """Boundary is ``(?<![A-Za-z0-9])``, not ``\\b``, in every backend."""
+        result = scrub_text(value, languages=["en"])
+        assert result["counts"]["address"] == 1, value
+        assert "[ADDRESS]" in result["text"], value
+
+    @pytest.mark.parametrize("value", ["A4 2PK", "PS5 1TB", "A1 2PK"])
+    def test_rejects_areas_that_do_not_exist(self, value: str) -> None:
+        result = scrub_text(f"part {value} in stock", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+        assert value in result["text"]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "AB12C 3DE",
+            "M12C 3DE",
+            "LA23J 2DX",
+            "SW123 4AB",
+        ],
+    )
+    def test_rejects_outward_shapes_that_do_not_exist(self, value: str) -> None:
+        result = scrub_text(f"order {value} shipped", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "NW16XE",
+            "nw1 6xe",
+            "XNW1 6XE",
+            "1NW1 6XE",
+            "NW1 6XEa",
+        ],
+    )
+    def test_ignores_out_of_scope_shapes(self, value: str) -> None:
+        result = scrub_text(f"ref {value} end", languages=["en"])
+        assert result["counts"]["address"] == 0, value
+
+    def test_disabled_without_en(self) -> None:
+        result = scrub_text("postcode NW1 6XE", languages=["nl"])
+        assert result["text"] == "postcode NW1 6XE"
         assert result["counts"]["address"] == 0
 
 

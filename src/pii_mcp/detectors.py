@@ -54,6 +54,9 @@ Patterns:
 - NL postcode (``address``): ``1234 AB`` / ``1234AB`` (one or more spaces)
   with uppercase letters only and SA/SD/SS rejects — structured fragment, not
   street-address NER.
+- UK postcode (``address``): ``NW1 6XE`` / ``EC1A 1BB``, uppercase, spaced
+  (compact ``NW16XE`` collides with ordinary tokens). The outward letters must
+  be a Royal Mail area, which rejects ``A4 2PK`` / ``PS5 1TB``.
 - Street address (``address``): street name + house number per pack. ``nl``: a
   capitalized word ending in ``straat``/``str.``/``laan``/``weg``/``gracht``/…
   then the number (``Kerkstraat 12``), ``Grote``/``Oude``/``Nieuwe``/… before
@@ -383,15 +386,23 @@ def _iban_accept_len(value: str) -> int:
 
 
 def _scrub_iban(text: str) -> tuple[str, int]:
+    """Mask IBANs across ``IBAN_RES``.
+
+    The lookaround patterns (0, 3, 4) retry a rejected match at ``start + 1``
+    so a greedy span that fails validation cannot swallow a real IBAN starting
+    inside it; the ``\\b``-bounded patterns resume at the match end. Mirrors
+    ``need_glue`` in the Rust ``scrub_iban``.
+    """
     out = text
     for ch in _INVISIBLE:
         out = out.replace(ch, "")
     count = 0
-    for pattern in IBAN_RES:
+    for index, pattern in enumerate(IBAN_RES):
         out, n = _replace_matches(
             out,
             pattern,
             "[IBAN]",
+            retry=index in (0, 3, 4),
             accept_end=lambda t, s, e: s + _iban_accept_len(t[s:e]),
         )
         count += n
@@ -1060,6 +1071,35 @@ def _scrub_nl_postcode(text: str) -> tuple[str, int]:
 
 
 nl_postcode_detector = Detector(type="address", scrub=_scrub_nl_postcode)
+
+# Outward A9, A99, A9A, AA9, AA99, AA9A, or GIR; inward 9AA. ``[0-9]`` not
+# ``\d``: JS ``\d`` is ASCII-only, Python's is not.
+UK_POSTCODE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Z]{1,2}[0-9][A-Z0-9]?|GIR)[ \t\u00a0\u202f]+"
+    r"[0-9][ABD-HJLNP-UW-Z]{2}(?![A-Za-z0-9])"
+)
+# Royal Mail postcode areas, plus non-geographic QC and GIR. ``M2 1TB`` (an SSD)
+# still passes; see ``AMBIGUOUS`` in eval/generators.py.
+_UK_POSTCODE_AREAS = frozenset(
+    """
+    AB AL B BA BB BD BH BL BN BR BS BT CA CB CF CH CM CO CR CT CV CW DA DD DE DG DH
+    DL DN DT DY E EC EH EN EX FK FY G GL GU GY HA HD HG HP HR HS HU HX IG IM IP IV JE
+    KA KT KW KY L LA LD LE LL LN LS LU M ME MK ML N NE NG NN NP NR NW OL OX PA PE PH
+    PL PO PR QC RG RH RM S SA SE SG SK SL SM SN SO SP SR SS ST SW SY TA TD TF TN TQ TR
+    TS TW UB W WA WC WD WF WN WR WS WV YO ZE GIR
+    """.split()
+)
+
+
+def _uk_postcode_valid(value: str) -> bool:
+    return re.match(r"[A-Z]+", value)[0] in _UK_POSTCODE_AREAS
+
+
+def _scrub_uk_postcode(text: str) -> tuple[str, int]:
+    return _replace_matches(text, UK_POSTCODE_RE, "[ADDRESS]", _uk_postcode_valid)
+
+
+uk_postcode_detector = Detector(type="address", scrub=_scrub_uk_postcode)
 
 _STREET_UP = r"A-Z\u00c0-\u00d6\u00d8-\u00de"
 _STREET_LOW = r"a-z\u00df-\u00f6\u00f8-\u017f"
