@@ -44,6 +44,9 @@ Patterns:
 - US SSN: hyphen/space/dot/slash or compact 9-digit with SSA area/group/serial
   rejects, plus obvious fakes (all-same digit, 123456789 / 987654321). Grouped
   SSN / BSN forms also accept nbsp, thin / narrow nbsp, and unicode dashes.
+- US ITIN (``tax_id``): grouped ``9XX-XX-XXXX`` only (hyphen, space, nbsp, or
+  unicode dash), first digit 9 and 4th–5th digits in the IRS ITIN ranges. The
+  compact form collides with BSNs and 9-digit invoice numbers.
 - German Steuer-IdNr (tax_id): 11 digits, compact or grouped ``12 345 678 901``,
   with structure + mod-11/10 check.
 - NL BTW-id (``vat_id``): ``NL`` + 9 digits + ``B`` + 2 digits with optional
@@ -838,6 +841,35 @@ def _scrub_ssn(text: str) -> tuple[str, int]:
 
 
 ssn_detector = Detector(type="ssn", scrub=_scrub_ssn)
+
+ITIN_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(rf"\b9\d{{2}}{_ID_DASH}\d{{2}}{_ID_DASH}\d{{4}}\b"),
+    re.compile(rf"\b9\d{{2}}{_ID_SPACE}\d{{2}}{_ID_SPACE}\d{{4}}\b"),
+)
+
+
+def _itin_valid(value: str) -> bool:
+    """4th–5th digits 50–65, 70–88, 90–92 or 94–99 (89 / 93 are other TINs).
+
+    IRS, IRM 3.21.263: https://www.irs.gov/irm/part3/irm_03-021-263r
+    """
+    digits = _strip_id_seps(value)
+    if len(digits) != 9 or not digits.isdigit() or digits[0] != "9":
+        return False
+    group = int(digits[3:5])
+    return 50 <= group <= 65 or 70 <= group <= 88 or 90 <= group <= 92 or group >= 94
+
+
+def _scrub_itin(text: str) -> tuple[str, int]:
+    out = text
+    count = 0
+    for pattern in ITIN_RES:
+        out, n = _replace_matches(out, pattern, "[TAX_ID]", _itin_valid)
+        count += n
+    return out, count
+
+
+itin_detector = Detector(type="tax_id", scrub=_scrub_itin)
 
 # Compact, or the ``12 345 678 901`` grouping printed on Steuerbescheide and
 # payslips (single space / nbsp between groups).
