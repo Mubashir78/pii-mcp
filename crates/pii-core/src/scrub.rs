@@ -480,6 +480,22 @@ mod tests {
     }
 
     #[test]
+    fn masks_grouped_itin_as_tax_id() {
+        let langs = vec!["en".to_string()];
+        for value in ["912-70-1234", "900 50 1234", "999\u{2013}94\u{2013}0001"] {
+            let r = scrub_text(&format!("itin {value} on file"), Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, "itin [TAX_ID] on file", "{value}");
+            assert_eq!(r.counts["tax_id"], 1, "{value}");
+            assert_eq!(r.counts["ssn"], 0, "{value}");
+        }
+        for value in ["912-89-1234", "912-93-1234", "912701234", "912.70.1234"] {
+            let text = format!("ref {value}");
+            let r = scrub_text(&text, Some(&langs), true, false).unwrap();
+            assert_eq!(r.text, text, "{value}");
+        }
+    }
+
+    #[test]
     fn masks_uk_postcode_in_every_outward_shape() {
         let langs = vec!["en".to_string()];
         for value in [
