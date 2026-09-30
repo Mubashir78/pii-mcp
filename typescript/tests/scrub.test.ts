@@ -66,6 +66,16 @@ describe("scrubText", () => {
     expect(slash.counts.iban).toBe(1);
   });
 
+  it("masks an IBAN inside a rejected greedy candidate", () => {
+    const hex = scrubText("18:c0:50:92:da:be4+4bc4545667033NL09BSLW5753882578");
+    expect(hex.text).toBe("18:c0:50:92:da:be4+4bc4545667033[IBAN]");
+    expect(hex.counts.iban).toBe(1);
+
+    const passport = scrubText("ac@LG180UU07GB89IWQY91132044634700");
+    expect(passport.text).toBe("ac@[PASSPORT][IBAN]");
+    expect(passport.counts.iban).toBe(1);
+  });
+
   it("masks glued emails as two hits", () => {
     const result = scrubText("a@b.comc@d.com");
     expect(result.text).toBe("[EMAIL][EMAIL]");
