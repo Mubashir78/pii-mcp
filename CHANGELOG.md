@@ -1,3 +1,11 @@
+## [1.9.0](https://github.com/foro-sh/pii-mcp/compare/v1.8.1...v1.9.0) (2026-09-30)
+
+### Features
+
+* **python:** add a US ITIN detector to the en pack ([56f39c7](https://github.com/foro-sh/pii-mcp/commit/56f39c78196b4ff483e47f438f038c088591277e)), closes [#62](https://github.com/foro-sh/pii-mcp/issues/62)
+* **rust:** mirror the US ITIN detector in pii-core ([f0323f8](https://github.com/foro-sh/pii-mcp/commit/f0323f8f2c8f03d70e98a923e36d6e71bede04b3)), closes [#62](https://github.com/foro-sh/pii-mcp/issues/62)
+* **typescript:** mirror the US ITIN detector in the js backend ([aad506e](https://github.com/foro-sh/pii-mcp/commit/aad506ed114c8cd3f00b04388e7ea786fa6f44f9)), closes [#62](https://github.com/foro-sh/pii-mcp/issues/62)
+
 ## [1.8.1](https://github.com/foro-sh/pii-mcp/compare/v1.8.0...v1.8.1) (2026-09-30)
 
 ### Bug Fixes
