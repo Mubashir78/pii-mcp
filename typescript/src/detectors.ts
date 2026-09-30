@@ -444,13 +444,13 @@ function ibanAcceptLen(value: string): number {
 function scrubIban(text: string): { text: string; count: number } {
   let out = text.replace(INVISIBLE, "");
   let count = 0;
-  for (const pattern of IBAN_RES) {
+  for (const [index, pattern] of IBAN_RES.entries()) {
     const result = replaceMatches(
       out,
       pattern,
       "[IBAN]",
       undefined,
-      false,
+      index === 0 || index === 3 || index === 4,
       (full, start, end) => start + ibanAcceptLen(full.slice(start, end)),
     );
     out = result.text;

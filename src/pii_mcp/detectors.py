@@ -386,15 +386,23 @@ def _iban_accept_len(value: str) -> int:
 
 
 def _scrub_iban(text: str) -> tuple[str, int]:
+    """Mask IBANs across ``IBAN_RES``.
+
+    The lookaround patterns (0, 3, 4) retry a rejected match at ``start + 1``
+    so a greedy span that fails validation cannot swallow a real IBAN starting
+    inside it; the ``\\b``-bounded patterns resume at the match end. Mirrors
+    ``need_glue`` in the Rust ``scrub_iban``.
+    """
     out = text
     for ch in _INVISIBLE:
         out = out.replace(ch, "")
     count = 0
-    for pattern in IBAN_RES:
+    for index, pattern in enumerate(IBAN_RES):
         out, n = _replace_matches(
             out,
             pattern,
             "[IBAN]",
+            retry=index in (0, 3, 4),
             accept_end=lambda t, s, e: s + _iban_accept_len(t[s:e]),
         )
         count += n

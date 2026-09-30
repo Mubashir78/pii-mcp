@@ -110,6 +110,9 @@ jobs:
           PII_MCP_BACKEND: native
         run: pytest -q -o pythonpath=
 
+      - name: Python and Rust agree (parity)
+        run: python eval/parity.py
+
   test-typescript:
     name: TypeScript (Node 22 + napi)
     if: ${{ !github.event.pull_request.draft }}
