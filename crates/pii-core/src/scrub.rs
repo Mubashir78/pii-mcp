@@ -402,9 +402,8 @@ mod tests {
     #[test]
     fn location_masks_the_first_valid_pair_not_the_leftmost() {
         // ``0.5741, -0.9633`` is leftmost but both components are within 1.0,
-        // so it is rejected. Restarting the scan one character in re-matches
-        // ``-0.9633,-37.45816``; the scan must resume after the rejected match
-        // and reach ``-37.45816,41.605875``.
+        // so it is rejected. The scan resumes after it, as Python does, so the
+        // overlapping window ``-0.9633,-37.45816`` is never considered.
         let r = scrub_text("scale 0.5741, -0.9633,-37.45816,41.605875", None, true, false).unwrap();
         assert_eq!(r.text, "scale 0.5741, -0.9633,[LOCATION]");
         assert_eq!(r.counts["location"], 1);

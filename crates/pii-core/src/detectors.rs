@@ -883,8 +883,6 @@ fn location_re() -> &'static Regex {
     })
 }
 
-
-
 fn location_boundary_ok(text: &str, start: usize, end: usize) -> bool {
     if start > 0 {
         let prev = text[..start].chars().next_back().unwrap();
@@ -1095,12 +1093,7 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
                     .filter(|&e| location_valid(&text[start..e]))
             };
             let Some(e) = shorter else {
-                // A rejected *validity* is a reject, exactly as in Python:
-                // resume after the match. Restarting at ``start + 1`` instead
-                // finds overlapping windows the Python scan never produces
-                // (``0.5741, -0.9633,-37.45816`` also matches from the second
-                // number, ``-0.9633,-37.45816``, whose components are not a
-                // real pair), and masks the wrong span.
+                // A validity reject resumes at the match end, as Python does.
                 pos = if right_edge_ok { end.max(start + 1) } else { start + 1 };
                 continue;
             };

@@ -435,10 +435,10 @@ class TestLocation:
         """A rejected pair must not hand the scan an overlapping window.
 
         ``0.5741, -0.9633`` is the leftmost match but both components are
-        within 1.0, so it is open ocean / an embedding vector. Restarting the
-        scan one character in re-matches ``-0.9633,-37.45816``, whose
-        components are not a coordinate pair either; Python resumes after the
-        rejected match and reaches ``-37.45816,41.605875``.
+        within 1.0, so it is open ocean / an embedding vector. The scan
+        resumes after the rejected match, so the overlapping window
+        ``-0.9633,-37.45816`` is never considered and ``-37.45816,41.605875``
+        is masked.
         """
         result = scrub_text("scale 0.5741, -0.9633,-37.45816,41.605875")
         assert result["text"] == "scale 0.5741, -0.9633,[LOCATION]"

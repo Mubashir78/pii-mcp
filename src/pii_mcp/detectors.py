@@ -386,18 +386,18 @@ def _iban_accept_len(value: str) -> int:
 
 
 def _scrub_iban(text: str) -> tuple[str, int]:
+    """Mask IBANs across ``IBAN_RES``.
+
+    The lookaround patterns (0, 3, 4) retry a rejected match at ``start + 1``
+    so a greedy span that fails validation cannot swallow a real IBAN starting
+    inside it; the ``\\b``-bounded patterns resume at the match end. Mirrors
+    ``need_glue`` in the Rust ``scrub_iban``.
+    """
     out = text
     for ch in _INVISIBLE:
         out = out.replace(ch, "")
     count = 0
     for index, pattern in enumerate(IBAN_RES):
-        # The lookaround patterns (0, 3, 4) retry a rejected match at
-        # ``start + 1``: their greedy span can swallow a real IBAN that starts
-        # inside it (``…67033NL09BSLW5753882578`` matches from the hex digit
-        # before the country code and fails the checksum), and resuming at the
-        # match end would step over it. The ``\b``-bounded patterns 1 and 2
-        # resume at the end, as Python ``re`` does. Mirrors ``need_glue`` in
-        # ``scrub_iban`` in the Rust core.
         out, n = _replace_matches(
             out,
             pattern,
