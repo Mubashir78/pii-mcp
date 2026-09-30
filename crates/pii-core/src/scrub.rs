@@ -377,6 +377,39 @@ mod tests {
     }
 
     #[test]
+    fn iban_inside_a_rejected_candidate_is_still_masked() {
+        // The compact pattern starts at the hex digit before ``NL`` and yields
+        // ``bc4545667033NL09BSLW5753882578``, whose country code is not in the
+        // registry; the real IBAN starts eight characters inside that span.
+        let r = scrub_text(
+            "18:c0:50:92:da:be4+4bc4545667033NL09BSLW5753882578",
+            None,
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(r.text, "18:c0:50:92:da:be4+4bc4545667033[IBAN]");
+        assert_eq!(r.counts["iban"], 1);
+    }
+
+    #[test]
+    fn iban_after_a_pseudo_country_code_is_masked() {
+        let r = scrub_text("ac@LG180UU07GB89IWQY91132044634700", None, true, false).unwrap();
+        assert_eq!(r.text, "ac@[PASSPORT][IBAN]");
+        assert_eq!(r.counts["iban"], 1);
+    }
+
+    #[test]
+    fn location_masks_the_first_valid_pair_not_the_leftmost() {
+        // ``0.5741, -0.9633`` is leftmost but both components are within 1.0,
+        // so it is rejected. The scan resumes after it, as Python does, so the
+        // overlapping window ``-0.9633,-37.45816`` is never considered.
+        let r = scrub_text("scale 0.5741, -0.9633,-37.45816,41.605875", None, true, false).unwrap();
+        assert_eq!(r.text, "scale 0.5741, -0.9633,[LOCATION]");
+        assert_eq!(r.counts["location"], 1);
+    }
+
+    #[test]
     fn masks_iban_and_card() {
         let r = scrub_text("Pay NL91ABNA0417164300 with 4111111111111111", None, true, false).unwrap();
         assert_eq!(r.text, "Pay [IBAN] with [CREDIT_CARD]");

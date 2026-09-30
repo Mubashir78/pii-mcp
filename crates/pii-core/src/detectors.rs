@@ -1074,7 +1074,8 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
             // ``°`` (``4.904152°22``); the linear regex keeps them. Only a
             // failed right edge backtracks: the tails never change a number,
             // so a validity reject stays a reject.
-            let shorter = if location_boundary_ok(text, start, end) {
+            let right_edge_ok = location_boundary_ok(text, start, end);
+            let shorter = if right_edge_ok {
                 None
             } else {
                 let mut value = m.as_str();
@@ -1092,7 +1093,8 @@ fn scrub_location_decimal(text: &str) -> (Option<String>, u32) {
                     .filter(|&e| location_valid(&text[start..e]))
             };
             let Some(e) = shorter else {
-                pos = start + 1;
+                // A validity reject resumes at the match end, as Python does.
+                pos = if right_edge_ok { end.max(start + 1) } else { start + 1 };
                 continue;
             };
             end = e;

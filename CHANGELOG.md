@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/foro-sh/pii-mcp/compare/v1.8.0...v1.8.1) (2026-09-30)
+
+### Bug Fixes
+
+* make the Python and Rust backends agree on three inputs ([386160b](https://github.com/foro-sh/pii-mcp/commit/386160b848b50eb5f41c0b43d542388126dfa37f))
+* **typescript:** retry rejected IBAN candidates like Python and Rust ([532eecc](https://github.com/foro-sh/pii-mcp/commit/532eecc6e52e2ce8cf9a41bf22ed091ca9819579))
+
 ## [1.8.0](https://github.com/foro-sh/pii-mcp/compare/v1.7.1...v1.8.0) (2026-09-29)
 
 ### Features
