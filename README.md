@@ -2,9 +2,10 @@
 
 Pattern-based PII scrubbing for MCP servers (regex + checksums), with an
 optional NER pass for person names in the Rust backend. Masks emails, IBANs,
-cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs, German tax IDs,
-Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house number
-addresses, Dutch and UK postcodes, and Dutch license plates in tool results.
+cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs and ITINs, German
+tax IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house
+number addresses, Dutch and UK postcodes, and Dutch license plates in tool
+results.
 Language packs: `en`, `nl`, and opt-in `de`.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)

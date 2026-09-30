@@ -40,6 +40,9 @@
  * - US SSN: hyphen/space/dot/slash or compact 9-digit with SSA area/group/serial
  *   rejects, plus obvious fakes (all-same digit, 123456789 / 987654321). Grouped
  *   SSN / BSN forms also accept nbsp, thin / narrow nbsp, and unicode dashes.
+ * - US ITIN (``tax_id``): grouped ``9XX-XX-XXXX`` only (hyphen, space, nbsp, or
+ *   unicode dash), first digit 9 and 4th–5th digits in the IRS ITIN ranges. The
+ *   compact form collides with BSNs and 9-digit invoice numbers.
  * - German Steuer-IdNr (tax_id): 11 digits, compact or grouped ``12 345 678 901``,
  *   with structure + mod-11/10 check.
  * - NL BTW-id (``vat_id``): ``NL`` + 9 digits + ``B`` + 2 digits with optional
@@ -871,6 +874,43 @@ function scrubSsn(text: string): { text: string; count: number } {
 }
 
 export const ssnDetector: Detector = { type: "ssn", scrub: scrubSsn };
+
+const ITIN_RES = [
+  new RegExp(String.raw`\b9\d{2}${ID_DASH}\d{2}${ID_DASH}\d{4}\b`, "g"),
+  new RegExp(String.raw`\b9\d{2}${ID_SPACE}\d{2}${ID_SPACE}\d{4}\b`, "g"),
+] as const;
+
+/**
+ * 4th–5th digits 50–65, 70–88, 90–92 or 94–99 (89 / 93 are other TINs).
+ *
+ * IRS, IRM 3.21.263: https://www.irs.gov/irm/part3/irm_03-021-263r
+ */
+function itinValid(value: string): boolean {
+  const digits = value.replace(ID_SEPS, "");
+  if (!/^9\d{8}$/.test(digits)) {
+    return false;
+  }
+  const group = Number(digits.slice(3, 5));
+  return (
+    (group >= 50 && group <= 65) ||
+    (group >= 70 && group <= 88) ||
+    (group >= 90 && group <= 92) ||
+    group >= 94
+  );
+}
+
+function scrubItin(text: string): { text: string; count: number } {
+  let out = text;
+  let count = 0;
+  for (const pattern of ITIN_RES) {
+    const result = replaceMatches(out, pattern, "[TAX_ID]", itinValid);
+    out = result.text;
+    count += result.count;
+  }
+  return { text: out, count };
+}
+
+export const itinDetector: Detector = { type: "tax_id", scrub: scrubItin };
 
 // Compact, or the ``12 345 678 901`` grouping printed on Steuerbescheide and
 // payslips (single space / nbsp between groups).

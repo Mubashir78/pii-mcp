@@ -4,9 +4,9 @@
 //! explicit boundary checks so matching stays on the linear-time `regex` crate.
 
 use crate::checksum::{
-    bsn_valid_grouped, iban_valid, imei_valid, is_group_sep, luhn_valid, nl_passport_valid,
-    nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped, uk_postcode_valid, GROUP_DASHES,
-    GROUP_SPACES,
+    bsn_valid_grouped, iban_valid, imei_valid, is_group_sep, itin_valid_grouped, luhn_valid,
+    nl_passport_valid, nl_postcode_valid, ssn_valid_grouped, tax_id_valid_grouped,
+    uk_postcode_valid, GROUP_DASHES, GROUP_SPACES,
 };
 use regex::Regex;
 use std::sync::OnceLock;
@@ -1374,6 +1374,22 @@ fn scrub_bsn(text: &str) -> (Option<String>, u32) {
     (second.or(first), count)
 }
 
+fn itin_res() -> &'static [Regex] {
+    static RES: OnceLock<Vec<Regex>> = OnceLock::new();
+    RES.get_or_init(|| {
+        let id_space = id_space();
+        let id_dash = id_dash();
+        vec![
+            Regex::new(&format!(r"\b9\d{{2}}{id_dash}\d{{2}}{id_dash}\d{{4}}\b")).unwrap(),
+            Regex::new(&format!(r"\b9\d{{2}}{id_space}\d{{2}}{id_space}\d{{4}}\b")).unwrap(),
+        ]
+    })
+}
+
+fn scrub_itin(text: &str) -> (Option<String>, u32) {
+    scrub_patterns(text, itin_res(), "[TAX_ID]", |v, _, _| itin_valid_grouped(v), false)
+}
+
 fn ssn_res() -> &'static [Regex] {
     static RES: OnceLock<Vec<Regex>> = OnceLock::new();
     RES.get_or_init(|| {
@@ -1998,6 +2014,10 @@ fn build_detectors(mask: u8) -> Vec<Detector> {
         });
     }
     if has_en {
+        pack.push(Detector {
+            category: PiiCategory::TaxId,
+            scrub: scrub_itin,
+        });
         pack.push(Detector {
             category: PiiCategory::Ssn,
             scrub: scrub_ssn,

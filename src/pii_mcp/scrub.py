@@ -15,9 +15,9 @@ Detector pack order (see ``_detectors_for``): universal → international phone
 (when any pack is active, before national IDs so ``+31(0)6…`` is not eaten by
 SSN) → locale phone forms (before BSN takes the subscriber part of
 ``040 78703244``) → checksum/rule-backed national IDs (DE IdNr before BSN,
-BSN before SSN when both packs are on; NL BTW before BSN, passport after) →
-street + house number per pack (en, de, nl) → postcode per pack → kenteken
-when ``nl``.
+BSN before SSN when both packs are on, US ITIN before SSN; NL BTW before
+BSN, passport after) → street + house number per pack (en, de, nl) →
+postcode per pack → kenteken when ``nl``.
 
 Optional Rust acceleration: when ``pii_mcp._native`` is importable (shipped in
 platform wheels, or built via maturin), ``scrub_text`` / ``scrub_payload``
@@ -37,6 +37,7 @@ from pii_mcp.detectors import (
     UNIVERSAL_DETECTORS,
     Detector,
     bsn_detector,
+    itin_detector,
     nl_license_plate_detector,
     nl_passport_detector,
     nl_postcode_detector,
@@ -206,6 +207,7 @@ def _detectors_for(languages: Sequence[str] | None) -> tuple[Detector, ...]:
         pack.append(bsn_detector)
         pack.append(nl_passport_detector)
     if "en" in langs:
+        pack.append(itin_detector)
         pack.append(ssn_detector)
         pack.append(street_en_detector)
         pack.append(uk_postcode_detector)

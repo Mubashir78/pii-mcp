@@ -185,6 +185,34 @@ describe("scrubText", () => {
     expect(result.counts.ssn).toBe(1);
   });
 
+  it("masks grouped US ITIN as tax_id with en pack", () => {
+    for (const value of [
+      "912-70-1234",
+      "900 50 1234",
+      "999\u201394\u20130001",
+    ]) {
+      const result = scrubText(`itin ${value} on file`, { languages: ["en"] });
+      expect(result.text).toBe("itin [TAX_ID] on file");
+      expect(result.counts.tax_id).toBe(1);
+      expect(result.counts.ssn).toBe(0);
+    }
+    expect(
+      scrubText('{"tin": "950-99-0001"}', { languages: ["en"] }).text,
+    ).toBe('{"tin": "[TAX_ID]"}');
+  });
+
+  it("leaves non-ITIN groups and compact 9xx digits alone", () => {
+    for (const value of [
+      "912-89-1234",
+      "912-93-1234",
+      "912701234",
+      "912.70.1234",
+    ]) {
+      const text = `ref ${value}`;
+      expect(scrubText(text, { languages: ["en"] }).text).toBe(text);
+    }
+  });
+
   it("masks German tax id with de pack", () => {
     const result = scrubText("IdNr 36574261809 gespeichert", {
       languages: ["de"],

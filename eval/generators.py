@@ -183,6 +183,17 @@ def ssn(r: R) -> str:
     return number
 
 
+def itin(r: R) -> str:
+    """A grouped US ITIN: ``9XX-XX-XXXX`` with a group the IRS issues.
+
+    Groups 50–65, 70–88, 90–92 and 94–99 (IRM 3.21.263). Only the hyphen and
+    space groupings are emitted: the detector leaves the compact form alone.
+    """
+    group = r.choice([*range(50, 66), *range(70, 89), 90, 91, 92, *range(94, 100)])
+    number = f"9{r.randint(0, 99):02d}{group:02d}{r.randint(0, 9999):04d}"
+    return _group(number, (3, 2, 4), r.choice(["-", " "]))
+
+
 def tax_id_de(r: R) -> str:
     while True:
         pool = list(string.digits)
@@ -369,6 +380,7 @@ PII: list[tuple[str, Callable[[R], str], tuple[str, ...]]] = [
     ("bsn", bsn, ("nl",)),
     ("ssn", ssn, ("en",)),
     ("tax_id", tax_id_de, ("de",)),
+    ("tax_id", itin, ("en",)),
     ("vat_id", vat_nl, ("nl",)),
     ("passport", passport_nl, ("nl",)),
     ("phone", phone_nl, ("nl",)),
@@ -432,6 +444,8 @@ CLEAN: list[tuple[str, Callable[[R], str]]] = [
     ("date", lambda r: r.choice([f"{r.randint(1, 28):02d}-{r.randint(1, 12):02d}-{r.randint(1990, 2030)}", f"{r.randint(1990, 2030)}/{r.randint(1, 12):02d}/{r.randint(1, 28):02d}"])),
     # Postcode-shaped, but not a real area.
     ("uk_postcode_product", lambda r: r.choice(["A4 2PK", "PS5 1TB", "A1 2PK"])),
+    # ITIN-shaped, but group 89 / 93 (other TINs) or outside the ITIN ranges.
+    ("itin_shaped", lambda r: f"9{_digits(r, 2)}-{r.choice(['89', '93', '40', '69'])}-{_digits(r, 4)}"),
 ]
 
 # Clean text that looks like PII to any pattern matcher (bare 9-digit ids vs

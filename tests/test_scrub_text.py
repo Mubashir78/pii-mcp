@@ -257,6 +257,35 @@ class TestSsn:
         assert result["counts"]["ssn"] == 0
 
 
+class TestItin:
+    def test_masks_grouped(self) -> None:
+        for value in ("912-70-1234", "900 50 1234", "999\u201394\u20130001"):
+            result = scrub_text(f"itin {value} on file", languages=["en"])
+            assert result["text"] == "itin [TAX_ID] on file", value
+            assert result["counts"]["tax_id"] == 1
+            assert result["counts"]["ssn"] == 0
+
+    def test_masks_inside_json_and_csv(self) -> None:
+        assert scrub_text('{"tin": "950-99-0001"}', languages=["en"])["text"] == (
+            '{"tin": "[TAX_ID]"}'
+        )
+        assert scrub_text("a,912-70-1234,b", languages=["en"])["text"] == "a,[TAX_ID],b"
+
+    def test_rejects_non_itin_group(self) -> None:
+        for bad in ("912-49-1234", "912-66-1234", "912-89-1234", "912-93-1234"):
+            result = scrub_text(f"ref {bad}", languages=["en"])
+            assert result["counts"]["tax_id"] == 0, bad
+
+    def test_ignores_compact_and_dotted(self) -> None:
+        for value in ("912701234", "912.70.1234", "912/70/1234"):
+            result = scrub_text(f"ref {value}", languages=["en"])
+            assert result["text"] == f"ref {value}", value
+
+    def test_disabled_without_en(self) -> None:
+        result = scrub_text("itin 912-70-1234", languages=["nl"])
+        assert result["counts"]["tax_id"] == 0
+
+
 class TestTaxId:
     def test_masks_valid_idnr(self) -> None:
         result = scrub_text("IdNr 36574261809 gespeichert", languages=["de"])

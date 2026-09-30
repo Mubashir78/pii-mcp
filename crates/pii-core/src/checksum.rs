@@ -262,6 +262,31 @@ fn ssn_valid_with(value: &str, is_sep: fn(char) -> bool) -> bool {
     true
 }
 
+/// US ITIN for scrub hits: 9 digits starting with 9, 4th–5th digits in
+/// 50–65, 70–88, 90–92 or 94–99 (89 / 93 are other TINs). Group separators
+/// (see ``is_id_sep``) are skipped, since the scrub patterns fix the grouping.
+///
+/// IRS, IRM 3.21.263: <https://www.irs.gov/irm/part3/irm_03-021-263r>
+pub(crate) fn itin_valid_grouped(value: &str) -> bool {
+    let mut digits = [0u8; 9];
+    let mut len = 0usize;
+    for c in value.chars() {
+        if is_id_sep(c) {
+            continue;
+        }
+        if !c.is_ascii_digit() || len >= 9 {
+            return false;
+        }
+        digits[len] = c as u8 - b'0';
+        len += 1;
+    }
+    if len != 9 || digits[0] != 9 {
+        return false;
+    }
+    let group = digits[3] * 10 + digits[4];
+    matches!(group, 50..=65 | 70..=88 | 90..=92 | 94..=99)
+}
+
 fn ssn_obviously_fake(digits: &[u8; 9]) -> bool {
     if digits.iter().all(|&b| b == digits[0]) {
         return true;
@@ -449,6 +474,18 @@ mod tests {
         assert!(bsn_valid_grouped("111\u{2013}222\u{2013}333"));
         assert!(!ssn_valid("219\u{2013}09\u{2013}9999"));
         assert!(ssn_valid_grouped("219\u{2013}09\u{2013}9999"));
+    }
+
+    #[test]
+    fn itin_groups() {
+        assert!(itin_valid_grouped("912-70-1234"));
+        assert!(itin_valid_grouped("900\u{2013}50\u{2013}0001"));
+        assert!(itin_valid_grouped("999 99 9999"));
+        assert!(!itin_valid_grouped("912-89-1234"));
+        assert!(!itin_valid_grouped("912-93-1234"));
+        assert!(!itin_valid_grouped("912-49-1234"));
+        assert!(!itin_valid_grouped("812-70-1234"));
+        assert!(!itin_valid_grouped("912-70-123"));
     }
 
     #[test]
