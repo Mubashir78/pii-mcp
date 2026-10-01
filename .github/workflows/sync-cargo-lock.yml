@@ -1,0 +1,59 @@
+name: Sync Cargo.lock
+
+# release-please bumps crates/pii-mcp-native/Cargo.toml on the Release PR but
+# cannot update that crate's entry in Cargo.lock, so the lock would drift and
+# `--locked` builds would fail. This commits the resynced lock onto the
+# Release PR so it lands inside the tag.
+#
+# Pushed with the app token, not GITHUB_TOKEN, so CI reruns on the new commit.
+on:
+  push:
+    # `*` not `**`: the branch name has no slash and some runners do not match
+    # it with `**`.
+    branches: ["release-please--branches--*"]
+
+concurrency:
+  group: sync-cargo-lock-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync Cargo.lock
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint a release token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # A custom-token checkout of github.sha detaches HEAD, leaving `git push`
+      # no branch to update, so check out the ref and push to it explicitly.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      # --workspace moves only the workspace members' own version lines; no
+      # third-party dependency is re-resolved.
+      - run: cargo update --workspace
+
+      - name: Commit if the lock changed
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          if git diff --quiet Cargo.lock; then
+            echo "Cargo.lock already in sync"
+            exit 0
+          fi
+          git commit -m "chore: sync Cargo.lock with the release version" Cargo.lock
+          # release-please force-pushes this branch when more commits land; a
+          # rejected push is harmless because that push reruns this job.
+          git push origin "HEAD:${{ github.ref }}"
