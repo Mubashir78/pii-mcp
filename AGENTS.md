@@ -42,19 +42,16 @@ so a two-paragraph summary with long lines fails on `footer-max-line-length`,
 not on the body rule you'd expect. Wrap at 72 like everywhere else and neither
 can fire.
 
-Getting this wrong is not caught where you'd notice. The Git hook does not run
-on a merge performed by GitHub, so the merge lands green and the failure
-surfaces in the **release** workflow, whose first step lints the pushed range
-and aborts before semantic-release. The result is a merged PR with no tag and
-no changelog entry. It self-heals — that step lints only `before..after`, so
-the next push to `main` releases everything since the last tag — but the
-release for that merge is simply skipped.
+The Git hook does not run on a merge performed by GitHub, so a bad merge
+message lands on `main` unchecked. release-please skips commits it cannot
+parse, so it costs a changelog entry rather than a release — still worth
+avoiding.
 
-**Versioning is automated and pre-GA.** semantic-release derives the version
-from commit messages on every push to `main` — never hand-edit a version or
-`CHANGELOG.md`. Releases live on the **0.x** line until GA; a breaking change
-bumps the minor, not the major (see `.releaserc.json`), so `1.0.0` stays a
-deliberate promotion.
+**Versioning is automated.** release-please derives the version from commit
+messages on `main` and accumulates them on one Release PR
+(`chore(main): release x.y.z`); merging that PR tags and publishes. Never
+hand-edit a version or `CHANGELOG.md`. On the 1.x line a breaking change
+bumps the major.
 
 For how changes get integrated — commit everything, group into reviewed PRs by
 concern, self-review and commit fixes, and **ask before merging** — follow the

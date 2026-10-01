@@ -45,12 +45,12 @@ this work."
   — **do not `git checkout` over it.** Stop and report the state; branching or
   switching now will reshuffle their uncommitted work.
 - **Branch off `main` first** — never commit directly to `main` (it is the
-  default and is protected by CI + semantic-release).
+  default and is protected by CI + release-please).
 - **One PR per concern.** A bug fix and an unrelated feature are two PRs. Don't
   smuggle a refactor into a feature PR. When in doubt, split.
 - Keep code and docs-only changes separate unless the docs directly document the
   code in the same PR.
-- Remember semantic-release reads commit/PR titles on `main`: `feat:` → minor,
+- Remember release-please reads commit/PR titles on `main`: `feat:` → minor,
   `fix:` → patch, `docs:`/`chore:` → no release. Title the PR with the type that
   reflects its real impact.
 
@@ -88,7 +88,7 @@ this work."
   commit. Give the merge commit a Conventional Commits subject (commitlint
   ignores merge commits by default, so GitHub's auto-generated `Merge pull
   request #N from ...` subject would slip through unflagged and pollute
-  history; semantic-release also reads that subject on `main` to derive the
+  history; release-please also reads that subject on `main` to derive the
   version).
 
 ## Running multiple agents at once

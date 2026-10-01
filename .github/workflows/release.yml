@@ -1,21 +1,18 @@
 name: Release
 
-# Runs on every push to main. Own concurrency group (not keyed on github.ref)
-# so a release run is never cancelled mid-push — a half-pushed tag/changelog
-# commit is the worst outcome. PR-time commitlint lives in ci.yml, which
-# cancels stale runs instead (that's the right behavior there, wrong here).
+# Runs on every push to main. An ordinary push opens or updates the Release PR
+# (`chore(main): release x.y.z`); merging that PR tags, creates the GitHub
+# release and publishes to PyPI. Own concurrency group (not keyed on
+# github.ref) so a release run is never cancelled mid-publish.
 #
-# Commitlint is a blocking first step: a non-conventional pushed commit fails
-# the job before semantic-release runs. When a release is cut, platform wheels
-# (maturin) plus a pure-Python wheel/sdist (hatchling) upload via OIDC.
+# The filename is load-bearing: PyPI's trusted publisher is pinned to it.
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write # create tags/releases and push the changelog commit
-  issues: write # comment on released issues
-  pull-requests: write # comment on released PRs
+  contents: write
+  pull-requests: write
   id-token: write # OIDC for PyPI trusted publishing
 
 concurrency:
@@ -24,12 +21,11 @@ concurrency:
 
 jobs:
   release:
-    name: Release
+    name: Release Please
     runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.semantic-release.outputs.published }}
-      version: ${{ steps.semantic-release.outputs.version }}
-      sha: ${{ steps.released-commit.outputs.sha }}
+      published: ${{ steps.release.outputs.release_created }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       - name: Mint a release token
         id: app-token
@@ -38,56 +34,15 @@ jobs:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      # GITHUB_TOKEN cannot push past main's branch protection, and a PR it
+      # opens would not trigger CI. The app token does both.
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          fetch-depth: 0 # full history so commit analysis sees every commit
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Lint pushed commits
-        env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
-        run: |
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            # New branch / no prior ref — lint just the tip (HEAD~1 does not
-            # exist on the first commit of an empty repo).
-            pnpm exec commitlint --last --verbose
-          else
-            pnpm exec commitlint --from "$BEFORE" --to "$AFTER" --verbose
-          fi
-
-      # GITHUB_TOKEN is the app-token step's output, not the default
-      # secrets.GITHUB_TOKEN — the default token can't push past main's
-      # branch protection once it is enabled.
-      #
-      # `published` / `version` are written by scripts/record-release.sh via
-      # the exec plugin's successCmd — `pnpm release` sets no outputs itself.
-      - name: Release
-        id: semantic-release
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: pnpm release
-
-      # The release commit is created and pushed by @semantic-release/git, so
-      # local HEAD now carries the bumped pyproject.toml. Publish jobs build
-      # this exact commit rather than a branch name, which would otherwise
-      # race with anything landing on main in the meantime.
-      - name: Record released commit
-        id: released-commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   build-wheels:
     name: Build wheels (${{ matrix.target }})

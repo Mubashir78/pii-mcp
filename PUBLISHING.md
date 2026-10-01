@@ -1,7 +1,9 @@
 # Publishing
 
-`pii-mcp` publishes to PyPI automatically on merge to `main` when
-semantic-release cuts a new version. Nothing is published from a pull request.
+Feature PRs merge to `main` without publishing. release-please opens (or
+updates) one Release PR that accumulates them; merging *that* PR cuts the
+version and publishes to PyPI. Nothing is published from a pull request,
+including the Release PR itself.
 
 ## Package
 
@@ -23,23 +25,24 @@ Published wheels are built without the `ner` cargo feature, so they carry no
 candle or tokenizer code. NER builds are not published; users build them from
 source (see the README).
 
-## What happens on merge
+## What happens on merge to main
 
-`.github/workflows/release.yml` runs:
+Commit messages are linted on the PR (`commitlint.yml`). On every push to
+`main`, `.github/workflows/release.yml` runs:
 
-1. **commitlint** — rejects commits that don't follow Conventional Commits.
-2. **release** — semantic-release analyzes commits. If a release is warranted,
-   it stamps the version into `pyproject.toml` and
-   `crates/pii-mcp-native/Cargo.toml` (`scripts/set-version.sh`), updates
-   `CHANGELOG.md`, commits `chore(release):`, tags, and creates a GitHub
-   release.
-3. **build-wheels** — maturin platform matrix for the release commit
+1. **release** — release-please. An ordinary `feat`/`fix` merge opens or
+   updates the Release PR (`chore(main): release x.y.z`), which bumps
+   `CHANGELOG.md`, `pyproject.toml` and `crates/pii-mcp-native/Cargo.toml`
+   (`release-please-config.json`). `docs`/`ci`/`chore` commits do not open
+   one. Merging the Release PR tags it and creates the GitHub release; the
+   jobs below run only then.
+2. **build-wheels** — maturin platform matrix for the release commit
    (maturin `v1.15.0` via pinned maturin-action). Each native-arch job
    smoke-tests the wheel (`using_native()` + a sample scrub) before upload;
    cross-compiled linux aarch64 skips the smoke test. Intel macOS wheels
    build on `macos-15-intel` (macos-13 is retired).
-4. **build-sdist** — pure hatchling wheel + sdist via `uv build`.
-5. **publish-python** — downloads all artifacts and uploads via OIDC trusted
+3. **build-sdist** — pure hatchling wheel + sdist via `uv build`.
+4. **publish-python** — downloads all artifacts and uploads via OIDC trusted
    publishing.
 
 ## Manual publishing
@@ -50,9 +53,6 @@ tab rather than cutting another release:
 - Dispatch **Publish Python**. It builds the branch head (after a release,
   that is the commit carrying the version bump), including the same wheel
   matrix and pure fallback.
-
-Use this once after the first merge of PyPI wiring to upload the current
-tagged version (e.g. `1.3.1`) without waiting for the next `feat:` / `fix:`.
 
 ## Credentials
 
