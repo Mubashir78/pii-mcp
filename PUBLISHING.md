@@ -33,7 +33,8 @@ Commit messages are linted on the PR (`commitlint.yml`). On every push to
 1. **release** — release-please. An ordinary `feat`/`fix` merge opens or
    updates the Release PR (`chore(main): release x.y.z`), which bumps
    `CHANGELOG.md`, `pyproject.toml` and `crates/pii-mcp-native/Cargo.toml`
-   (`release-please-config.json`). `docs`/`ci`/`chore` commits do not open
+   (`release-please-config.json`). `sync-cargo-lock.yml` then commits the
+   matching `Cargo.lock` onto the PR. `docs`/`ci`/`chore` commits do not open
    one. Merging the Release PR tags it and creates the GitHub release; the
    jobs below run only then.
 2. **build-wheels** — maturin platform matrix for the release commit
