@@ -71,9 +71,9 @@ git worktree add .worktrees/<branch> -b <branch> origin/main
   commit that passes its checks on its own. Never `--no-verify`. Never commit
   to or force-push `main`. End each message with the `Co-Authored-By` trailer
   your harness specifies, if any.
-- The commit type drives the release (semantic-release): `feat` → minor,
+- The commit type drives the release (release-please): `feat` → minor,
   `fix`/`perf` → patch, `docs`/`chore`/`test`/`refactor`/`ci` → none. A
-  breaking change bumps only the minor (`.releaserc.json`). Pick the type
+  breaking change bumps the major. Pick the type
   that reflects real user impact. Never edit the version or `CHANGELOG.md`.
 - Don't write comments unless they are really necessary. Code should explain
   itself; add a comment only when the code would not make sense without it.
