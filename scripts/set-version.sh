@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Stamp a release version into pyproject.toml and the PyO3 crate manifest.
+# Stamp a release version into pyproject.toml and the PyO3 crate manifest, and
+# resync Cargo.lock.
 #
 # semantic-release owns the version number but ships no Python plugin, so the
 # Python manifest has to be rewritten by hand. The native crate version is kept
@@ -40,5 +41,13 @@ PY
 
 stamp_version "$ROOT/pyproject.toml"
 stamp_version "$ROOT/crates/pii-mcp-native/Cargo.toml"
+
+# The crate manifest is a lockfile input, so bumping it leaves Cargo.lock
+# recording the previous version and every cargo command then rewrites the
+# lock. `--workspace` limits this to the workspace members, so no third-party
+# dependency is re-resolved and only the changed version line moves. It cannot
+# be `--offline`: an empty CARGO_HOME has no crates.io index to resolve
+# against and the release runner starts cold.
+cargo update --workspace
 
 echo "set version to $VERSION"

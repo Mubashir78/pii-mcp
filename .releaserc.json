@@ -24,6 +24,7 @@
       {
         "assets": [
           "CHANGELOG.md",
+          "Cargo.lock",
           "pyproject.toml",
           "crates/pii-mcp-native/Cargo.toml"
         ],
