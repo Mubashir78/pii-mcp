@@ -6,6 +6,13 @@
 * **rust:** mirror the US ITIN detector in pii-core ([f0323f8](https://github.com/foro-sh/pii-mcp/commit/f0323f8f2c8f03d70e98a923e36d6e71bede04b3)), closes [#62](https://github.com/foro-sh/pii-mcp/issues/62)
 * **typescript:** mirror the US ITIN detector in the js backend ([aad506e](https://github.com/foro-sh/pii-mcp/commit/aad506ed114c8cd3f00b04388e7ea786fa6f44f9)), closes [#62](https://github.com/foro-sh/pii-mcp/issues/62)
 
+## [1.9.1](https://github.com/foro-sh/pii-mcp/compare/v1.9.0...v1.9.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **release:** resync Cargo.lock when the version is stamped ([6bb0d07](https://github.com/foro-sh/pii-mcp/commit/6bb0d07e22f1c916928c95e92676b7c8d2191128))
+
 ## [1.8.1](https://github.com/foro-sh/pii-mcp/compare/v1.8.0...v1.8.1) (2026-09-30)
 
 ### Bug Fixes
