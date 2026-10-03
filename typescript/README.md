@@ -1,10 +1,18 @@
 # pii-mcp (TypeScript)
 
-Pattern-based PII scrubbing for MCP servers (regex + checksums). Same detectors
-as the Python package: emails, IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates,
-BSNs, US SSNs and ITINs, German tax IDs, Dutch BTW-ids, Dutch passport/ID
-numbers, phones, street + house number addresses, Dutch and UK postcodes, and
-Dutch license plates. Language packs: `en`, `nl`, and opt-in `de`.
+**Redact PII from MCP tool results before they reach the LLM.** Masks emails,
+IBANs, cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs and ITINs,
+German tax IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street +
+house number addresses, Dutch and UK postcodes, and Dutch license plates with
+regex + checksums (IBAN mod-97, Luhn, BSN 11-proef). Same detectors as the
+Python package. Language packs: `en`, `nl`, and opt-in `de`.
+
+```ts
+import { scrubText } from "pii-mcp";
+
+scrubText("Contact ada@example.com, card 4111111111111111").text;
+// "Contact [EMAIL], card [CREDIT_CARD]"
+```
 
 FastMCP middleware stays Python-only (`pii_mcp.fastmcp`); this package is the
 core scrub API for Node/TypeScript callers.
@@ -39,7 +47,7 @@ Force the JS path with `PII_MCP_BACKEND=js`. Require native with
 
 Build the addon with the `ner` feature and point `PII_MCP_NER_MODEL` at the
 model directory (download command in the
-[main README](../README.md#person-names-optional-ner)):
+[main README](https://github.com/foro-sh/pii-mcp#person-names-optional-ner)):
 
 ```bash
 npm run build:native -- --features ner
@@ -84,4 +92,4 @@ scrubPayload({ email: "ada@example.com" }, { languages: ["en"] });
 usingNative(); // true when the napi addon is active
 ```
 
-For a runnable Node example, see [`examples/node/`](../examples/node/).
+For a runnable Node example, see [`examples/node/`](https://github.com/foro-sh/pii-mcp/tree/main/examples/node).
