@@ -1,7 +1,7 @@
 {
   "name": "pii-mcp",
   "version": "0.1.0",
-  "description": "Pattern-based PII scrubbing for MCP servers (TypeScript + optional Rust napi)",
+  "description": "Redact PII from MCP tool results before they reach the LLM — emails, IBANs, cards, phones, addresses and more (TypeScript, optional Rust core)",
   "type": "module",
   "license": "MIT",
   "author": "foro.sh",
@@ -16,9 +16,22 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
+    "mcp-server",
     "pii",
+    "pii-detection",
+    "pii-redaction",
+    "redaction",
+    "anonymization",
+    "data-masking",
     "privacy",
-    "redaction"
+    "gdpr",
+    "dlp",
+    "llm",
+    "ai-agents",
+    "ai-safety",
+    "iban",
+    "credit-card"
   ],
   "engines": {
     "node": ">=18"
