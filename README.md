@@ -4,7 +4,7 @@
 pii-mcp masks emails, IBANs, credit cards, phone numbers, addresses, national
 IDs and more in what your Model Context Protocol server sends back, before the
 model, its provider's logs or your traces see it. Add one line of
-[FastMCP](https://github.com/jlowin/fastmcp) middleware, or call `scrub_text` /
+[FastMCP](https://gofastmcp.com) middleware, or call `scrub_text` /
 `scrubText` from Python or TypeScript.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
