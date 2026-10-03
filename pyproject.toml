@@ -5,12 +5,33 @@ build-backend = "hatchling.build"
 [project]
 name = "pii-mcp"
 version = "1.9.1"
-description = "Pattern-based PII scrubbing for MCP servers — one-line FastMCP middleware"
+description = "Redact PII from MCP tool results before they reach the LLM — one-line FastMCP middleware, Rust-accelerated"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "foro.sh" }]
-keywords = ["mcp", "pii", "fastmcp", "privacy", "redaction"]
+keywords = [
+  "mcp",
+  "model-context-protocol",
+  "fastmcp",
+  "mcp-server",
+  "middleware",
+  "pii",
+  "pii-detection",
+  "pii-redaction",
+  "redaction",
+  "anonymization",
+  "data-masking",
+  "privacy",
+  "gdpr",
+  "avg",
+  "dlp",
+  "llm",
+  "ai-agents",
+  "ai-safety",
+  "iban",
+  "bsn",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -20,7 +41,12 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Text Processing :: Filters",
 ]
 dependencies = []
 
@@ -43,6 +69,10 @@ native = [
 
 [project.urls]
 Homepage = "https://github.com/foro-sh/pii-mcp"
+Source = "https://github.com/foro-sh/pii-mcp"
+Documentation = "https://github.com/foro-sh/pii-mcp#readme"
+Examples = "https://github.com/foro-sh/pii-mcp/tree/main/examples"
+Changelog = "https://github.com/foro-sh/pii-mcp/blob/main/CHANGELOG.md"
 Issues = "https://github.com/foro-sh/pii-mcp/issues"
 
 [tool.hatch.build.targets.wheel]
