@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Shared pattern-based PII detectors and scrub walk (regex + checksums)"
+keywords = ["pii", "redaction", "privacy", "mcp", "anonymization"]
+categories = ["text-processing", "parsing"]
 
 [dependencies]
 regex = { workspace = true }
