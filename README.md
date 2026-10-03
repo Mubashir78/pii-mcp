@@ -1,63 +1,120 @@
-# pii-mcp
+# pii-mcp: PII redaction for MCP servers
 
-Pattern-based PII scrubbing for MCP servers (regex + checksums), with an
-optional NER pass for person names in the Rust backend. Masks emails, IBANs,
-cards, BICs, MACs, IMEIs, IPs, coordinates, BSNs, US SSNs and ITINs, German
-tax IDs, Dutch BTW-ids, Dutch passport/ID numbers, phones, street + house
-number addresses, Dutch and UK postcodes, and Dutch license plates in tool
-results.
-Language packs: `en`, `nl`, and opt-in `de`.
+**Keep personal data in your MCP tool results from reaching the LLM.**
+pii-mcp masks emails, IBANs, credit cards, phone numbers, addresses, national
+IDs and more in what your Model Context Protocol server sends back, before the
+model, its provider's logs or your traces see it. Add one line of
+[FastMCP](https://github.com/jlowin/fastmcp) middleware, or call `scrub_text` /
+`scrubText` from Python or TypeScript.
 
 [![PyPI](https://img.shields.io/pypi/v/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/pii-mcp.svg)](https://pypi.org/project/pii-mcp/)
 [![npm](https://img.shields.io/npm/v/pii-mcp.svg)](https://www.npmjs.com/package/pii-mcp)
 [![CI](https://github.com/foro-sh/pii-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/foro-sh/pii-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-
-## Example
-
-```python
-from pii_mcp import scrub_text
-
-scrub_text(
-    "Contact ada@example.com. IBAN NL91 ABNA 0417 1643 00. card 4111111111111111"
-)
-# Contact [EMAIL]. IBAN [IBAN]. card [CREDIT_CARD]
-```
-
-For runnable scripts including a FastMCP server and payload scrubbing, see the [`examples/`](examples/) directory.
-
-## Install
-
-```bash
-pip install "pii-mcp[fastmcp]"   # FastMCP >= 3.0.0
-# or
-pip install pii-mcp              # core; platform wheels include Rust acceleration
-# or
-npm install pii-mcp
-```
-
-### FastMCP
 
 ```python
 from fastmcp import FastMCP
 from pii_mcp.fastmcp import PiiScrubMiddleware
 
-mcp = FastMCP("MyServer")
-mcp.add_middleware(PiiScrubMiddleware())  # languages=["en", "nl"] by default
-# mcp.add_middleware(PiiScrubMiddleware(languages=["en", "nl", "de"]))
+mcp = FastMCP("crm")
+mcp.add_middleware(PiiScrubMiddleware())
+
+
+@mcp.tool
+def get_customer(customer_id: str) -> str:
+    return "Ada, ada@example.com, IBAN NL91 ABNA 0417 1643 00, +31 6 12345678"
+    # the model receives: "Ada, [EMAIL], IBAN [IBAN], [PHONE]"
 ```
 
-Results only. On scrub failure or oversize, the result is withheld, never
-forwarded unmasked.
+## Why
 
-### Core
+MCP tools return whatever their backends hold: CRM records, support tickets,
+database rows, inboxes. Every result lands in the model's context window, and
+from there in provider logs, tracing tools and sometimes the model's reply.
+pii-mcp masks PII at the server boundary, so it never leaves your process
+unredacted.
+
+- **One line for FastMCP.** Scrubs tool, resource and prompt results: text
+  blocks, structured content and `meta`.
+- **Fails closed.** A result that cannot be scrubbed (error or oversize) is
+  withheld, never forwarded unmasked.
+- **Checksums, not just regex.** IBAN mod-97, Luhn for cards and IMEIs, the
+  Dutch BSN 11-proef and the German tax ID check keep false positives down.
+- **Fast and local.** A shared Rust core masks 100 KiB in about 2 ms. No
+  network calls, no model download, deterministic output. Pure Python and
+  TypeScript fallbacks run the same detectors.
+- **GDPR / AVG oriented.** Language packs `en`, `nl` and opt-in `de`, mapped
+  to the Dutch DPA's examples of personal data ([Scope](#scope)).
+- **Optional NER for names.** An opt-in Rust build masks person names with an
+  XLM-R model ([Person names](#person-names-optional-ner)).
+
+## What gets masked
+
+| Placeholder       | Detects                                         | Packs      |
+| ----------------- | ----------------------------------------------- | ---------- |
+| `[EMAIL]`         | Email addresses, including Unicode (EAI/IDN)    | always     |
+| `[IBAN]`          | IBANs (mod-97 checked)                          | always     |
+| `[CREDIT_CARD]`   | Payment card numbers (Luhn + issuer prefix)     | always     |
+| `[BIC]`           | BIC / SWIFT codes                               | always     |
+| `[IP]`            | IPv4 and IPv6 addresses                         | always     |
+| `[MAC]`           | MAC addresses                                   | always     |
+| `[IMEI]`          | IMEIs (grouped forms, Luhn checked)             | always     |
+| `[LOCATION]`      | Decimal and DMS latitude/longitude              | always     |
+| `[PHONE]`         | International and national phone numbers        | en, nl, de |
+| `[ADDRESS]`       | Street + house number; Dutch and UK postcodes   | en, nl, de |
+| `[SSN]`           | US SSNs and ITINs                               | en         |
+| `[BSN]`           | Dutch citizen service numbers (11-proef)        | nl         |
+| `[VAT_ID]`        | Dutch BTW-ids                                   | nl         |
+| `[PASSPORT]`      | Dutch passport and ID card numbers              | nl         |
+| `[LICENSE_PLATE]` | Dutch license plates                            | nl         |
+| `[TAX_ID]`        | German Steuer-IdNr (mod-11/10 checked)          | de         |
+| `[PERSON]`        | Person names                                    | NER build  |
+
+## Install
+
+```bash
+pip install "pii-mcp[fastmcp]"   # FastMCP middleware (FastMCP >= 3.0.0)
+pip install pii-mcp              # core only; platform wheels include the Rust core
+npm install pii-mcp              # TypeScript / Node
+```
+
+## Usage
+
+### FastMCP middleware
+
+```python
+mcp.add_middleware(PiiScrubMiddleware())  # languages=["en", "nl"] by default
+mcp.add_middleware(PiiScrubMiddleware(languages=["en", "nl", "de"]))
+```
+
+The middleware scrubs results only, not tool arguments or tool schemas. On
+scrub failure or oversize, the result is withheld, never forwarded unmasked.
+Pass `on_scrub=` to receive per-category counts for logging or metrics.
+
+### Python
 
 ```python
 from pii_mcp import scrub_text, scrub_payload
 
-scrub_text("mail ada@example.com")
+scrub_text("Contact ada@example.com. card 4111111111111111")["text"]
+# 'Contact [EMAIL]. card [CREDIT_CARD]'
+
 scrub_payload({"email": "ada@example.com"}, languages=["en"])
 ```
+
+### TypeScript
+
+```ts
+import { scrubText, scrubPayload } from "pii-mcp";
+
+scrubText("mail ada@example.com").text; // "mail [EMAIL]"
+scrubPayload({ email: "ada@example.com" }, { languages: ["en"] });
+```
+
+Runnable scripts, including a FastMCP server you can open in the MCP
+Inspector, are in
+[`examples/`](https://github.com/foro-sh/pii-mcp/tree/main/examples).
 
 ## Scope
 
